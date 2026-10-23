@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QFileDialog, QFontComboBox, QFormLayout, QGroupBo
 from ..render.model import ANIM_KINDS, EASINGS, Element
 from ..render.text_renderer import element_bbox
 from . import bind
+from .widgets import Section, Toggle
 
 ANIM_LABELS = {"none": "Nessuna", "fade": "Dissolvenza", "slide_left": "Scorri da sinistra", "slide_right": "Scorri da destra",
                "slide_up": "Scorri dall'alto", "slide_down": "Scorri dal basso", "pop": "Scala (pop)",
@@ -37,9 +38,10 @@ class ElementEditor(QWidget):
     def _clear(self):
         while self.lay.count():
             it = self.lay.takeAt(0)
-            if it.widget():
-                it.widget().setParent(None)
-                it.widget().deleteLater()
+            w = it.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
 
     def set_element(self, el: Element | None):
         self.el = el
@@ -49,8 +51,8 @@ class ElementEditor(QWidget):
             self.lay.addStretch(1)
             return
         cb = self.changed.emit
-        gen = QGroupBox("Posizione e aspetto")
-        f = QFormLayout(gen)
+        gen = Section("Posizione e aspetto", "g:" + "Posizione e aspetto")
+        f = gen.form()
         f.addRow("X (%)", bind.spin(el, "x", -20, 120, 0.5, 1, "", 100, cb))
         f.addRow("Y (%)", bind.spin(el, "y", -20, 120, 0.5, 1, "", 100, cb))
         f.addRow("Rotazione (°)", bind.spin(el, "rotation", -360, 360, 1, 1, "", 1, cb))
@@ -82,10 +84,10 @@ class ElementEditor(QWidget):
 
     def _text(self, el):
         cb = self.changed.emit
-        g = QGroupBox("Testo")
-        f = QFormLayout(g)
+        g = Section("Testo", "g:" + "Testo")
+        f = g.form()
         te = QPlainTextEdit(el.text)
-        te.setFixedHeight(70)
+        te.setMinimumHeight(72)
         te.textChanged.connect(lambda: (setattr(el, "text", te.toPlainText()), cb()))
         f.addRow(te)
         fc = QFontComboBox()
@@ -103,8 +105,8 @@ class ElementEditor(QWidget):
         f.addRow("Interlinea", bind.spin(el, "line_spacing", 0.5, 3, 0.05, 2, "", 1, cb))
         f.addRow("Spaziatura lettere (%)", bind.spin(el, "letter_spacing", -5, 20, 0.1, 1, "", 100, cb))
         self.lay.addWidget(g)
-        g = QGroupBox("Colore e contorno")
-        f = QFormLayout(g)
+        g = Section("Colore e contorno", "g:" + "Colore e contorno")
+        f = g.form()
         f.addRow("Riempimento", bind.combo(el.fill, "kind", [("Tinta unita", "solid"), ("Sfumatura", "gradient")], cb))
         f.addRow("Colore", bind.color(el.fill, "color", cb))
         f.addRow("Colore 2 (sfumatura)", bind.color(el.fill, "color2", cb))
@@ -113,8 +115,8 @@ class ElementEditor(QWidget):
         f.addRow("Colore contorno", bind.color(el.outline, "color", cb))
         self.lay.addWidget(g)
         self._shadow(el)
-        g = QGroupBox("Box di sfondo")
-        f = QFormLayout(g)
+        g = Section("Box di sfondo", "g:" + "Box di sfondo")
+        f = g.form()
         f.addRow(bind.check(el.box, "enabled", "Attivo", cb))
         f.addRow("Colore", bind.color(el.box, "color", cb))
         f.addRow("Opacità", bind.spin(el.box, "opacity", 0, 1, 0.05, 2, "", 1, cb))
@@ -124,8 +126,8 @@ class ElementEditor(QWidget):
 
     def _shadow(self, el):
         cb = self.changed.emit
-        g = QGroupBox("Ombra")
-        f = QFormLayout(g)
+        g = Section("Ombra", "g:" + "Ombra")
+        f = g.form()
         f.addRow(bind.check(el.shadow, "enabled", "Attiva", cb))
         f.addRow("Colore", bind.color(el.shadow, "color", cb))
         f.addRow("Sfocatura (%)", bind.spin(el.shadow, "blur", 0, 5, 0.1, 1, "", 100, cb))
@@ -136,8 +138,8 @@ class ElementEditor(QWidget):
 
     def _image(self, el):
         cb = self.changed.emit
-        g = QGroupBox("Immagine / logo")
-        f = QFormLayout(g)
+        g = Section("Immagine / logo", "g:" + "Immagine / logo")
+        f = g.form()
         row = QHBoxLayout()
         le = bind.line(el, "path", cb)
         btn = QPushButton("Scegli…")
@@ -183,8 +185,8 @@ class ElementEditor(QWidget):
 
     def _shape(self, el):
         cb = self.changed.emit
-        g = QGroupBox("Forma")
-        f = QFormLayout(g)
+        g = Section("Forma", "g:" + "Forma")
+        f = g.form()
         f.addRow("Tipo", bind.combo(el, "shape", [("Rettangolo", "rect"), ("Ellisse", "ellipse"), ("Linea", "line")], cb))
         f.addRow("Larghezza (%)", bind.spin(el, "w", 0.5, 150, 0.5, 1, "", 100, cb))
         f.addRow("Altezza (%)", bind.spin(el, "h", 0.1, 150, 0.5, 1, "", 100, cb))
@@ -199,8 +201,8 @@ class ElementEditor(QWidget):
 
     def _bar(self, el):
         cb = self.changed.emit
-        g = QGroupBox("Barra di avanzamento")
-        f = QFormLayout(g)
+        g = Section("Barra di avanzamento", "g:" + "Barra di avanzamento")
+        f = g.form()
         f.addRow("Posizione", bind.combo(el, "position", [("In basso", "bottom"), ("In alto", "top")], cb))
         f.addRow("Spessore (% altezza)", bind.spin(el, "thickness", 0.1, 5, 0.1, 2, "", 100, cb))
         f.addRow("Margine (%)", bind.spin(el, "margin", 0, 10, 0.1, 1, "", 100, cb))
@@ -211,11 +213,10 @@ class ElementEditor(QWidget):
         self.lay.addWidget(g)
 
     def _targets(self, el):
-        g = QGroupBox("Dove si applica")
-        l = QVBoxLayout(g)
-        from PySide6.QtWidgets import QCheckBox
+        g = Section("Dove si applica", "g:targets")
+        l = g.body_lay
         for key, text in (("main", "Video principale"), ("title", "Titolo iniziale"), ("outro", "Logo / schermata finale")):
-            c = QCheckBox(text)
+            c = Toggle(text)
             c.setChecked(key in el.targets)
 
             def tg(on, k=key):
@@ -235,8 +236,8 @@ class ElementEditor(QWidget):
             kinds = [(l, k) for l, k in kinds if k not in ("typewriter", "by_word", "by_letter")]
         eases = [(EASE_LABELS[k], k) for k in EASINGS]
         for title, a in (("Animazione di entrata", el.anim_in), ("Animazione di uscita", el.anim_out)):
-            g = QGroupBox(title)
-            f = QFormLayout(g)
+            g = Section(title, "g:" + title)
+            f = g.form()
             f.addRow("Tipo", bind.combo(a, "kind", kinds, cb))
             f.addRow("Durata (s)", bind.spin(a, "duration", 0.05, 10, 0.1, 2, "", 1, cb))
             f.addRow("Curva", bind.combo(a, "easing", eases, cb))

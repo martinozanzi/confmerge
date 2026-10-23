@@ -27,13 +27,15 @@ class MainWindow(QMainWindow):
         self.state = state or AppState()
         self.setWindowTitle("ConfMerge")
         self.resize(1280, 820)
+        self.setMinimumSize(1100, 700)
         self.stack = QStackedWidget()
         self.select = SelectPage(self.state)
         self.analysis = AnalysisPage(self.state)
         self.review = ReviewPage(self.state)
         self.graphics = GraphicsPage(self.state, self.review)
         self.export = ExportPage(self.state, self.review)
-        for p in (self.select, self.analysis, self.review, self.graphics, self.export):
+        from .graphics_page import scrolled
+        for p in (self.select, self.analysis, self.review, self.graphics, scrolled(self.export)):
             self.stack.addWidget(p)
         central = QWidget()
         lay = QVBoxLayout(central)

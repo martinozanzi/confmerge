@@ -55,6 +55,7 @@ if not exist assets\splash.png python tools\make_assets.py
 rem --- opzioni comuni PyInstaller
 set COMMON=--noconfirm --clean --windowed --name ConfMerge --icon assets\icon.ico --paths src ^
  --add-binary "bin\ffmpeg.exe;bin" --add-binary "bin\ffprobe.exe;bin" ^
+ --add-data "src\confmerge\resources;confmerge\resources" ^
  --add-data "THIRD-PARTY-NOTICES.txt;." --add-data "LICENSE;." --add-data "bin\ffmpeg-version.txt;bin" ^
  --exclude-module tkinter.test --exclude-module matplotlib --exclude-module PySide6.QtWebEngineCore
 

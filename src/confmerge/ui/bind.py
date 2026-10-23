@@ -35,8 +35,9 @@ def ispin(obj, attr, lo, hi, cb: Callable = lambda: None, suffix="") -> QSpinBox
     return w
 
 
-def check(obj, attr, text, cb: Callable = lambda: None) -> QCheckBox:
-    w = QCheckBox(text)
+def check(obj, attr, text, cb: Callable = lambda: None):
+    from .widgets.toggle import Toggle
+    w = Toggle(text)
     w.setChecked(bool(getattr(obj, attr)))
     w.toggled.connect(lambda x: _set(obj, attr, x, cb))
     return w
@@ -63,7 +64,7 @@ def line(obj, attr, cb: Callable = lambda: None) -> QLineEdit:
 
 def color(obj, attr, cb: Callable = lambda: None) -> QPushButton:
     w = QPushButton()
-    w.setFixedWidth(64)
+    w.setMinimumWidth(64)
 
     def paint():
         c = getattr(obj, attr)

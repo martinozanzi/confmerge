@@ -62,6 +62,23 @@ Used only to compute the QR matrix (the image is drawn with QPainter).
   https://github.com/lincolnloop/python-qrcode
 
 -------------------------------------------------------------------------------
+5b. Inter (font) - SIL Open Font License 1.1
+-------------------------------------------------------------------------------
+Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/Inter).
+Files bundled: Inter-Regular, Inter-Medium, Inter-SemiBold, Inter-Bold (.ttf) in confmerge/resources/fonts,
+unmodified; the license text is in confmerge/resources/fonts/Inter-OFL.txt.
+  https://rsms.me/inter/   License: https://openfontlicense.org
+
+-------------------------------------------------------------------------------
+5c. Lucide (icons) - ISC License
+-------------------------------------------------------------------------------
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).
+All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+A subset of the SVG icons (lucide-static 0.468.0) is bundled in confmerge/resources/icons, unmodified;
+the license text is in confmerge/resources/icons/LUCIDE-LICENSE.txt.
+  https://lucide.dev   Source: https://github.com/lucide-icons/lucide
+
+-------------------------------------------------------------------------------
 6. Python - Python Software Foundation License
 -------------------------------------------------------------------------------
 The interpreter and standard library embedded in the executable.  https://docs.python.org/3/license.html

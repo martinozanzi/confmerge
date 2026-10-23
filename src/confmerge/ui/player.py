@@ -6,6 +6,7 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from .canvas import Canvas
+from .widgets import IconButton
 
 FRAME = 0.04
 
@@ -40,17 +41,19 @@ class PlayerWidget(QWidget):
         self.slider.sliderMoved.connect(lambda v: self.set_position(v / 1000 * self.duration))
         lay.addWidget(self.slider)
         row = QHBoxLayout()
-        self.btn_play = QPushButton("▶ Riproduci")
-        self.btn_play.setToolTip("Spazio")
+        row.setSpacing(8)
+        self.btn_play = IconButton("play", "Riproduci / pausa (Spazio)")
         self.btn_play.clicked.connect(self.toggle)
         row.addWidget(self.btn_play)
-        for text, delta, tip in (("⏮ -1 s", -1.0, "Maiusc+Sinistra"), ("◀ fotogramma", -FRAME, "Sinistra"),
-                                 ("fotogramma ▶", FRAME, "Destra"), ("+1 s ⏭", 1.0, "Maiusc+Destra")):
-            b = QPushButton(text)
-            b.setToolTip(tip)
+        for icon, delta, tip in (("skip-back", -1.0, "Indietro di 1 secondo (Maiusc+Sinistra)"),
+                                 ("chevron-left", -FRAME, "Fotogramma precedente (Sinistra)"),
+                                 ("chevron-right", FRAME, "Fotogramma successivo (Destra)"),
+                                 ("skip-forward", 1.0, "Avanti di 1 secondo (Maiusc+Destra)")):
+            b = IconButton(icon, tip)
             b.clicked.connect(lambda _=False, d=delta: self.step(d))
             row.addWidget(b)
         self.lbl = QLabel("0:00:00.00 / 0:00:00.00")
+        self.lbl.setProperty("role", "muted")
         row.addStretch(1)
         row.addWidget(self.lbl)
         lay.addLayout(row)
@@ -84,7 +87,7 @@ class PlayerWidget(QWidget):
         self.player.play()
 
     def _on_state(self, st) -> None:
-        self.btn_play.setText("⏸ Pausa" if st == QMediaPlayer.PlayingState else "▶ Riproduci")
+        self.btn_play.set_icon("pause" if st == QMediaPlayer.PlayingState else "play")
 
     def _on_pos(self, ms: int) -> None:
         self._update(ms / 1000.0)

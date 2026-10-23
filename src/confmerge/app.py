@@ -16,8 +16,14 @@ def main() -> int:
     app.setApplicationName("ConfMerge")
     app.setApplicationVersion(__version__)
     app.aboutToQuit.connect(paths.cleanup_temp)
-    win = MainWindow()
+    from .ui.state import AppState
+    from .ui.theme import theme
+    state = AppState()
+    theme.apply(app)
+    win = MainWindow(state)
+    from .ui.theme import set_titlebar
     win.show()
+    set_titlebar(win, theme.t.name == "dark")
     try:  # splash screen di PyInstaller (solo nel target onefile)
         import pyi_splash  # type: ignore
         pyi_splash.close()

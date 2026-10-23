@@ -35,7 +35,7 @@ class ThumbnailDialog(QDialog):
         self.cands = QListWidget()
         self.cands.setViewMode(QListWidget.IconMode)
         self.cands.setIconSize(__import__("PySide6.QtCore", fromlist=["QSize"]).QSize(160, 90))
-        self.cands.setFixedHeight(130)
+        self.cands.setMinimumHeight(120)
         self.cands.setFlow(QListWidget.LeftToRight)
         self.cands.setWrapping(False)
         self.cands.itemClicked.connect(lambda it: self.set_time(it.data(Qt.UserRole)))

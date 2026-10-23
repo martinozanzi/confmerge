@@ -22,6 +22,11 @@ class AppState(QObject):
     def __init__(self, settings: Settings | None = None):
         super().__init__()
         self.settings = settings or Settings()
+        from .theme import theme
+        theme.prefs.data = self.settings.data.setdefault("ui", {})
+        theme.prefs.save = self.settings.save
+        theme.mode = theme.prefs.get("theme", "dark")
+        theme.reduce_motion = bool(theme.prefs.get("reduce_motion", False))
         self.project: Project | None = None
         self.clips: list[MediaInfo] = []
         self.spec = RenderSpec()

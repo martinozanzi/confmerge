@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+from PySide6.QtWidgets import (QFrame, QScrollArea, QAbstractItemView, QGridLayout, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QInputDialog, QLabel, QListWidget, QMessageBox, QPushButton,
                                QSlider, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
@@ -13,9 +13,20 @@ from ..credit import CREDIT_TEXT
 from ..render.model import Anim, Background, Element, Fill, LowerThird, Outline
 from ..spec import ASPECTS, LAYOUTS, RES_SHORT, LayoutSpan, SlideChange, output_size
 from . import bind
+from .widgets import IconButton, SecondaryButton, Section
 from .canvas import Canvas
 from .element_editor import ElementEditor
 from .player import fmt
+
+
+def scrolled(w: QWidget) -> QScrollArea:
+    """Scheda con scroll verticale: il contenuto prende l'altezza che gli serve, mai schiacciato."""
+    sa = QScrollArea()
+    sa.setWidgetResizable(True)
+    sa.setFrameShape(QFrame.NoFrame)
+    sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    sa.setWidget(w)
+    return sa
 
 
 def new_element(kind: str, font: str = "Segoe UI") -> Element:
@@ -117,8 +128,8 @@ class ImageTab(QWidget):
         im = self.state.spec.image
         cb = self.state.touch
         lay = QVBoxLayout(self)
-        g = QGroupBox("Formato di uscita")
-        f = QFormLayout(g)
+        g = Section("Formato di uscita", "g:" + "Formato di uscita")
+        f = g.form()
         f.addRow("Risoluzione (lato corto)", bind.combo(im, "resolution", list(RES_SHORT), cb))
         f.addRow("Formato", bind.combo(im, "aspect", [*ASPECTS, ("Personalizzato", "custom")], cb))
         f.addRow("Personalizzato L", bind.spin(im, "custom_w", 1, 100, 1, 1, "", 1, cb))
@@ -126,8 +137,8 @@ class ImageTab(QWidget):
         f.addRow("Fps (0 = originali)", self._fps(im, cb))
         f.addRow("Video verticali / formato diverso", bind.combo(im, "vertical_mode", [("Bande nere", "bars"), ("Ritaglia", "crop")], cb))
         lay.addWidget(g)
-        g = QGroupBox("Ritaglio (% rimosso dai lati)")
-        f = QFormLayout(g)
+        g = Section("Ritaglio (% rimosso dai lati)", "g:" + "Ritaglio (% rimosso dai lati)")
+        f = g.form()
         self.crop_spins = []
         for lab, a in (("Sinistra", "crop_l"), ("Alto", "crop_t"), ("Destra", "crop_r"), ("Basso", "crop_b")):
             s = bind.spin(im, a, 0, 90, 0.5, 1, "", 100, cb)
@@ -141,8 +152,8 @@ class ImageTab(QWidget):
         rb.clicked.connect(self.reset_crop)
         f.addRow(rb)
         lay.addWidget(g)
-        g = QGroupBox("Zoom e posizione")
-        f = QFormLayout(g)
+        g = Section("Zoom e posizione", "g:" + "Zoom e posizione")
+        f = g.form()
         f.addRow("Zoom", bind.spin(im, "zoom", 1, 5, 0.05, 2, "×", 1, cb))
         f.addRow("Centro X (%)", bind.spin(im, "cx", 0, 100, 1, 0, "", 100, cb))
         f.addRow("Centro Y (%)", bind.spin(im, "cy", 0, 100, 1, 0, "", 100, cb))
@@ -153,8 +164,8 @@ class ImageTab(QWidget):
         f.addRow("Da (s di uscita)", bind.spin(im, "kb_t0", 0, 36000, 1, 1, "", 1, cb))
         f.addRow("A (s di uscita)", bind.spin(im, "kb_t1", 0, 36000, 1, 1, "", 1, cb))
         lay.addWidget(g)
-        g = QGroupBox("Dissolvenze video e audio")
-        f = QFormLayout(g)
+        g = Section("Dissolvenze video e audio", "g:" + "Dissolvenze video e audio")
+        f = g.form()
         f.addRow("In apertura (s)", bind.spin(im, "fade_in", 0, 10, 0.1, 1, "", 1, cb))
         f.addRow("In chiusura (s)", bind.spin(im, "fade_out", 0, 10, 0.1, 1, "", 1, cb))
         lay.addWidget(g)
@@ -197,28 +208,36 @@ class OverlayTab(QWidget):
         self.state, self.page, self.which = state, page, which   # which: main | title | outro
         lay = QHBoxLayout(self)
         left = QVBoxLayout()
-        self.scene_box = QGroupBox("Scena")
-        self.scene_form = QFormLayout(self.scene_box)
+        self.scene_box = Section("Scena", "g:scene")
+        self.scene_form = self.scene_box.form()
         left.addWidget(self.scene_box)
         self.list = QListWidget()
         self.list.currentRowChanged.connect(self.pick)
         left.addWidget(self.list, 1)
-        row = QHBoxLayout()
-        for text, kind in (("+ Testo", "text"), ("+ Immagine/logo", "image"), ("+ Forma", "shape"), ("+ Barra", "bar")):
-            b = QPushButton(text)
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        for n, (text, kind, ic) in enumerate((("Testo", "text", "type"), ("Logo / immagine", "image", "image-plus"),
+                                              ("Forma", "shape", "shapes"), ("Barra", "bar", "activity"))):
+            b = SecondaryButton(text, ic, f"Aggiungi: {text.lower()}")
             b.clicked.connect(lambda _=False, k=kind: self.add(k))
-            row.addWidget(b)
-        left.addLayout(row)
+            grid.addWidget(b, n // 2, n % 2)
+        left.addLayout(grid)
         row = QHBoxLayout()
-        for text, fn in (("Duplica", self.dup), ("▲", lambda: self.move(-1)), ("▼", lambda: self.move(1)), ("Elimina", self.delete)):
-            b = QPushButton(text)
+        row.setSpacing(8)
+        for ic, tip, fn in (("copy", "Duplica", self.dup), ("arrow-up", "Sposta su", lambda: self.move(-1)),
+                            ("arrow-down", "Sposta giù", lambda: self.move(1)), ("trash-2", "Elimina", self.delete)):
+            b = IconButton(ic, tip)
             b.clicked.connect(fn)
             row.addWidget(b)
+        row.addStretch(1)
         left.addLayout(row)
         lw = QWidget()
         lw.setLayout(left)
-        lw.setMaximumWidth(330)
-        lay.addWidget(lw)
+        self.list.setMinimumHeight(120)
+        lsa = scrolled(lw)
+        lsa.setMinimumWidth(270)
+        lsa.setMaximumWidth(360)
+        lay.addWidget(lsa)
         self.editor = ElementEditor()
         self.editor.changed.connect(self.on_edit)
         lay.addWidget(self.editor, 1)
@@ -258,7 +277,7 @@ class OverlayTab(QWidget):
         cb = self.on_edit
         self.scene_form.addRow(bind.check(sc, "enabled", "Attivo", cb))
         if self.which == "title":
-            self.scene_form.addRow(bind.check(sc, "over_video", "Sopra le prime immagini del video (sfondo trasparente)", cb))
+            self.scene_form.addRow(bind.check(sc, "over_video", "Sopra il video (sfondo trasparente)", cb))
         self.scene_form.addRow("Durata (s)", bind.spin(sc, "duration", 0.5, 60, 0.5, 1, "", 1, cb))
         self.scene_form.addRow("Dissolvenza (s)", bind.spin(sc, "fade", 0, 3, 0.1, 1, "", 1, cb))
         bg = sc.background
@@ -358,11 +377,15 @@ class LowerThirdTab(QWidget):
             row.addWidget(b)
         row.addStretch(1)
         lay.addLayout(row)
-        self.style_box = QGroupBox("Stile e animazione (ultimo lower third selezionato)")
-        self.style_form = QFormLayout(self.style_box)
+        self.style_box = Section("Stile e animazione", "g:lt-style")
+        self.style_form = self.style_box.form()
         lay.addWidget(self.style_box)
         self.table.currentCellChanged.connect(lambda r, *_: self.build_style(r))
         state.profile_changed.connect(self.refresh)
+        self.refresh()
+
+    def showEvent(self, e):
+        super().showEvent(e)
         self.refresh()
 
     def lts(self) -> list[LowerThird]:
@@ -458,8 +481,8 @@ class SlidesTab(QWidget):
         self.src = QLabel()
         lay.addWidget(self.src)
         split = QHBoxLayout()
-        g = QGroupBox("Cambi slide (tempo di uscita) — premi N nella Revisione durante la riproduzione")
-        gl = QVBoxLayout(g)
+        g = Section("Cambi slide (premi N nella Revisione mentre guardi il video)", "g:slide-changes")
+        gl = g.body_lay
         self.ct = QTableWidget(0, 2)
         self.ct.setHorizontalHeaderLabels(["Tempo (s)", "Slide n."])
         self.ct.itemChanged.connect(self.changes_edited)
@@ -471,8 +494,8 @@ class SlidesTab(QWidget):
         b.clicked.connect(lambda: self.del_row(self.ct, sl.changes))
         gl.addWidget(b)
         split.addWidget(g)
-        g = QGroupBox("Layout nella timeline (da questo istante in poi)")
-        gl = QVBoxLayout(g)
+        g = Section("Layout nella timeline (da questo istante in poi)", "g:slide-layouts")
+        gl = g.body_lay
         self.lt = QTableWidget(0, 2)
         self.lt.setHorizontalHeaderLabels(["Tempo (s)", "Layout"])
         self.lt.itemChanged.connect(self.layouts_edited)
@@ -492,8 +515,8 @@ class SlidesTab(QWidget):
         gl.addWidget(b)
         split.addWidget(g)
         lay.addLayout(split, 1)
-        g = QGroupBox("Riquadro piccolo (PiP)")
-        f = QFormLayout(g)
+        g = Section("Riquadro piccolo (PiP)", "g:" + "Riquadro piccolo (PiP)")
+        f = g.form()
         pip = sl.pip
         f.addRow("Angolo", bind.combo(pip, "corner", [("In basso a destra", "br"), ("In basso a sinistra", "bl"),
                                                        ("In alto a destra", "tr"), ("In alto a sinistra", "tl")], cb))
@@ -610,8 +633,8 @@ class CreditTab(QWidget):
         super().__init__(parent)
         self.state = state
         lay = QVBoxLayout(self)
-        self.g = QGroupBox("Credito finale")
-        self.f = QFormLayout(self.g)
+        self.g = Section("Credito finale", "g:credit")
+        self.f = self.g.form()
         lay.addWidget(self.g)
         lay.addStretch(1)
         state.profile_changed.connect(self.build)
@@ -657,17 +680,20 @@ class GraphicsPage(QWidget):
         ll.addWidget(self.tip)
         split.addWidget(left)
         self.tabs = QTabWidget()
+        self.tabs.tabBar().setUsesScrollButtons(False)
+        self.tabs.tabBar().setExpanding(False)
+        self.tabs.tabBar().setElideMode(Qt.ElideNone)
         self.image_tab = ImageTab(state, self)
-        self.tabs.addTab(self.image_tab, "Immagine")
+        self.tabs.addTab(scrolled(self.image_tab), "Immagine")
         self.ov_main = OverlayTab(state, self, "main")
         self.ov_title = OverlayTab(state, self, "title")
         self.ov_outro = OverlayTab(state, self, "outro")
-        self.tabs.addTab(self.ov_main, "Overlay, logo, barra")
-        self.tabs.addTab(self.ov_title, "Titolo iniziale")
-        self.tabs.addTab(self.ov_outro, "Schermata finale")
-        self.tabs.addTab(LowerThirdTab(state, self), "Lower third")
-        self.tabs.addTab(SlidesTab(state, self), "Slide e PiP")
-        self.tabs.addTab(CreditTab(state), "Credito")
+        self.tabs.addTab(self.ov_main, "Overlay")
+        self.tabs.addTab(self.ov_title, "Titolo")
+        self.tabs.addTab(self.ov_outro, "Finale")
+        self.tabs.addTab(scrolled(LowerThirdTab(state, self)), "Lower third")
+        self.tabs.addTab(scrolled(SlidesTab(state, self)), "Slide e PiP")
+        self.tabs.addTab(scrolled(CreditTab(state)), "Credito")
         self.tabs.currentChanged.connect(self._tab)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 3)
