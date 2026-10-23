@@ -1,4 +1,5 @@
 numpy>=1.26
 scipy>=1.11
-# Fase 2+: PySide6>=6.6
+PySide6==6.8.3
+qrcode>=7.4
 # Opzionale (migliora il rilevamento del parlato se installabile): webrtcvad

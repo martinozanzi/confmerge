@@ -163,7 +163,7 @@ def _esc(path: str) -> str:
 
 
 def build_plan(p: Project, clips: list[MediaInfo], out: Path, mode: str = "auto",
-               t0: float | None = None, t1: float | None = None) -> ExportPlan:
+               t0: float | None = None, t1: float | None = None, audio_post: str = "") -> ExportPlan:
     """Costruisce gli argomenti ffmpeg. `mode`: auto | copy | encode."""
     t0 = 0.0 if t0 is None else max(0.0, t0)
     t1 = p.total_duration if t1 is None else min(p.total_duration, t1)
@@ -200,7 +200,7 @@ def build_plan(p: Project, clips: list[MediaInfo], out: Path, mode: str = "auto"
         dur = t1 - t0
         args = ["-f", "concat", "-safe", "0", "-i", str(lst), "-i", p.audio,
                 "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
-                "-filter:a", audio_filter(p, t0), "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+                "-filter:a", ",".join(x for x in (audio_filter(p, t0), audio_post) if x), "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
                 "-t", f"{dur:.6f}", "-movflags", "+faststart", str(out)]
         return ExportPlan("copy", args, dur, t0, notes)
 
