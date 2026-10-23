@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+bin/ffmpeg.exe
+bin/ffprobe.exe
+.pytest_cache/
