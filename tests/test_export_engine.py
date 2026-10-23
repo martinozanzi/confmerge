@@ -18,9 +18,8 @@ SR = 16000
 
 
 @pytest.fixture(scope="module")
-def qapp():
-    from PySide6.QtGui import QGuiApplication
-    return QGuiApplication.instance() or QGuiApplication([])
+def qapp(qt_app):
+    return qt_app
 
 
 @pytest.fixture(scope="module")

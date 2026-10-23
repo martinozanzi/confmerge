@@ -1,39 +1,50 @@
 # ConfMerge
 
 Prepara video di conferenze per YouTube: unisce i file video, sostituisce l'audio con una registrazione
-esterna sincronizzata automaticamente, taglia inizio e fine ed esporta un MP4.
+esterna sincronizzata automaticamente, taglia inizio e fine, applica ritaglio/zoom/risoluzione, titoli,
+overlay, lower third, slide/PiP e logo finale, ed esporta un MP4 pronto da caricare.
 
 Licenza MIT – © 2026 Martino Zanzi – https://github.com/martinozanzi/confmerge
+Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
-> **Stato: Fase 1 di 8** – pipeline da riga di comando (unione + sync + trim + export).
-> La GUI, la grafica, le slide, la coda e il packaging `.exe` arrivano nelle fasi successive.
+## Uso
+Avvia `ConfMerge.exe` e segui le schermate: **Selezione → Analisi → Revisione → Grafica → Export**.
 
-## Uso (sviluppo)
+- **Selezione**: una cartella (trova video, audio più lungo, slide) oppure file singoli; drag & drop.
+- **Revisione**: player con anteprima WYSIWYG, forma d'onda con marker trascinabili, offset in ms,
+  «riascolta sincronia», fotogramma ±, ±1 s. Tasti: `Spazio`, `←/→`, `Maiusc+←/→`, `I`/`O` (inizio/fine
+  taglio), `N` (cambio slide). I tagli suggeriti non vengono mai applicati senza conferma.
+- **Grafica**: immagine (formato, ritaglio, zoom, Ken Burns, fade), overlay/logo/barra, titolo iniziale,
+  schermata finale, lower third, slide e PiP, credito, profili («Salva come profilo» sempre disponibile).
+- **Export**: preset YouTube 1080p/1440p/4K, Veloce (copia stream), Personalizzato; loudness −14 LUFS,
+  filtri voce, stima di tempo (benchmark su 10 s) e dimensione, anteprima 10 s, coda, miniatura 1280×720.
 
-Servono Python 3.11+, `ffmpeg` e `ffprobe` (in `bin/` oppure nel PATH).
+Impostazioni e profili: `%APPDATA%\ConfMerge`. Log: `%LOCALAPPDATA%\ConfMerge\confmerge.log`.
 
+## Build (Windows 10/11, serve solo Python 3.11+)
 ```
-python -m venv .venv && .venv\Scripts\activate      (Windows)
-pip install -r requirements.txt
-set PYTHONPATH=src
+build.bat            (onefile + onedir)
+build.bat onefile    dist\onefile\ConfMerge.exe   – un solo file, con splash
+build.bat onedir     dist\onedir\ConfMerge\       – avvio più veloce
+```
+`build.bat` crea `.venv`, installa le dipendenze, scarica ffmpeg/ffprobe statici in `bin\` (se mancano) e
+lancia PyInstaller. L'utente finale non installa nulla.
 
+## Sviluppo e riga di comando
+```
+pip install -r requirements.txt pytest
+set PYTHONPATH=src
+python -m confmerge                      (GUI)
+python -m confmerge run CARTELLA -o uscita.mp4          (CLI: analisi + export)
 python -m confmerge analyze CARTELLA -o lavoro.confmerge
 python -m confmerge export lavoro.confmerge -o uscita.mp4 --accept-trim
-python -m confmerge run CARTELLA -o uscita.mp4          (analizza e chiede conferma del taglio)
-```
-
-- `CARTELLA`: i video MP4/MOV vengono ordinati per `creation_time` (ripiego sul nome); l'audio esterno
-  è il file audio più lungo (oppure `--audio FILE`).
-- Il taglio suggerito **non** viene mai applicato senza conferma: `--accept-trim`, oppure `--start/--end`
-  (secondi o `mm:ss`).
-- `--mode auto|copy|encode`: la copia stream taglia sul keyframe precedente (lo script lo segnala);
-  la ricodifica è esatta al fotogramma.
-- `--drift-correct`: applica la correzione di deriva dei clock (atempo) se misurata.
-- I video originali non vengono mai modificati. Log in `%LOCALAPPDATA%\ConfMerge`.
-
-## Test
-
-```
-pip install pytest
 python -m pytest
 ```
+Per le slide PDF si usa solo QtPdf di PySide6 (nessun PyMuPDF). PySide6 è fissato a 6.8.3.
+
+## Architettura
+Tutti gli elementi grafici sono disegnati con QPainter su QImage RGBA (`render/`), con la stessa funzione per
+anteprima ed export (WYSIWYG): parti statiche = un PNG con `overlay enable=between(t,a,b)`, parti animate =
+sequenza PNG solo per la durata dell'animazione, barra di avanzamento = un PNG che scorre con `overlay x=expr(t)`.
+Moduli principali: `ffmpeg_wrapper`, `media_scan`, `sync`, `trim_detect`, `audio_fx`, `graph` (filtergraph),
+`export_engine`, `estimator`, `slides`, `credit`, `settings`/`profiles`, `project`, `queue`, `worker`, `ui/`.

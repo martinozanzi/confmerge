@@ -221,14 +221,14 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     extra = 0.0
     if with_scenes:
         if gr.title.enabled and not gr.title.over_video:
-            v, a, d, fr = _scene(g, gr.title, "title", W, H, fps, workdir, "t")
+            v, a, d, fr = _scene(g, gr.title, "title", W, H, fps, workdir, "t", extra=[e for e in gr.elements if "title" in e.targets])
             seq.append((v, a, d, 0.0))
             frames += fr
             extra += d
     seq.append(("vmain", "amain", D, gr.title.fade if (with_scenes and gr.title.enabled and not gr.title.over_video) else 0.0))
     if with_scenes:
         if gr.outro.enabled:
-            v, a, d, fr = _scene(g, gr.outro, "outro", W, H, fps, workdir, "u")
+            v, a, d, fr = _scene(g, gr.outro, "outro", W, H, fps, workdir, "u", extra=[e for e in gr.elements if "outro" in e.targets])
             seq.append((v, a, d, gr.outro.fade))
             frames += fr
             extra += d
@@ -264,14 +264,14 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
 
 
 def _scene(g: _G, scene: Scene, target: str, W: int, H: int, fps: float, workdir: Path, pre: str,
-           fade_inout: float = 0.0) -> tuple[str, str, float, int]:
+           fade_inout: float = 0.0, extra: list[Element] | None = None) -> tuple[str, str, float, int]:
     d = scene.duration
     bg = workdir / f"{pre}_bg.png"
     compositor.render_scene_background(scene, W, H).save(str(bg), "PNG")
     k = g.img_input(str(bg), d)
     cur = _lab("sb")
     g.f.append(f"[{k}:v]format=yuv420p,setsar=1[{cur}]")
-    els = scene.elements
+    els = list(scene.elements) + list(extra or [])
     layers = compositor.plan_layers(els, W, H, d, fps, workdir, pre)
     cur = add_layers(g, cur, layers)
     ch = []

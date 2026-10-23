@@ -7,18 +7,10 @@ import os
 import re
 from pathlib import Path
 
-DEFAULT_CREDIT = {"enabled": True, "duration": 3.0, "qr": False}
-
-
 def default_profile() -> dict:
-    return {
-        "graphics": {"elements": [], "title": None, "outro": None, "lower_thirds": [], "progress_bar": None},
-        "credit": dict(DEFAULT_CREDIT),
-        "export": {"preset": "YouTube 1080p", "crf_mode": False, "hw": "auto"},
-        "audio": {"loudnorm": True, "highpass": False, "denoise": False, "compressor": False},
-        "image": {"resolution": "1080p", "aspect": "16:9", "vertical_mode": "bars"},
-        "font": "Segoe UI",
-    }
+    from .profiles import profile_from_spec
+    from .spec import RenderSpec
+    return profile_from_spec(RenderSpec())
 
 
 def config_dir() -> Path:

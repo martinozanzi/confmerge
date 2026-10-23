@@ -299,3 +299,23 @@ def render_element(el: Element, W: int, H: int, st: AnimState | None = None) -> 
         q.end()
         out = res
     return out
+
+
+def element_bbox(el: Element, W: int, H: int) -> QRectF:
+    """Rettangolo (in pixel) occupato dall'elemento, senza trasformazioni: serve a selezione e trascinamento."""
+    if el.kind == "text":
+        r = _Block(el, W, H).rect
+        return r.adjusted(-6, -6, 6, 6)
+    if el.kind == "image":
+        px = max(1, round(el.width * W))
+        img = _load_image(el.path, px) if el.path else None
+        r = QRectF(0, 0, px, img.height() if img else px * 0.6)
+    elif el.kind == "bar":
+        th = max(2, round(el.thickness * H))
+        r = QRectF(0, 0, W, th)
+        r.moveTop(H - th - el.margin * H if el.position == "bottom" else el.margin * H)
+        return r
+    else:
+        r = QRectF(0, 0, el.w * W, max(el.h * H, 8))
+    r.moveCenter(QPointF(el.x * W, el.y * H))
+    return r

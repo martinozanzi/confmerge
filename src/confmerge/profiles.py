@@ -1,0 +1,35 @@
+"""Profili: sottoinsieme della RenderSpec (grafica, credito, export, audio, immagine) richiamabile per canale/evento."""
+from __future__ import annotations
+
+from .serde import from_dict, to_dict
+from .spec import AudioSettings, CreditSettings, ExportSettings, Graphics, ImageSettings, RenderSpec
+
+
+def profile_from_spec(spec: RenderSpec, font: str = "Segoe UI") -> dict:
+    return {
+        "graphics": to_dict(spec.graphics),
+        "credit": to_dict(spec.credit),
+        "export": {k: v for k, v in to_dict(spec.export).items() if k not in ("name",)},
+        "audio": to_dict(spec.audio),
+        "image": to_dict(spec.image),
+        "font": font,
+    }
+
+
+def apply_profile(spec: RenderSpec, profile: dict) -> None:
+    """Applica il profilo alla spec (non tocca slide e tempi del lavoro corrente)."""
+    g = profile.get("graphics")
+    if g:
+        spec.graphics = from_dict(Graphics, {k: v for k, v in g.items() if v is not None})
+    if profile.get("credit"):
+        spec.credit = from_dict(CreditSettings, profile["credit"])
+    if profile.get("export"):
+        name, out_dir = spec.export.name, spec.export.out_dir
+        spec.export = from_dict(ExportSettings, profile["export"])
+        spec.export.name = name
+        if not spec.export.out_dir:
+            spec.export.out_dir = out_dir
+    if profile.get("audio"):
+        spec.audio = from_dict(AudioSettings, profile["audio"])
+    if profile.get("image"):
+        spec.image = from_dict(ImageSettings, profile["image"])

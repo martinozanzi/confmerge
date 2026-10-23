@@ -1,0 +1,67 @@
+"""Geometria di visualizzazione: stessa logica di crop/zoom/adattamento usata dall'export (anteprima WYSIWYG)."""
+from __future__ import annotations
+
+from PySide6.QtCore import QRectF
+
+from .spec import ImageSettings, view_transform
+
+
+def source_to_frame(src_w: float, src_h: float, im: ImageSettings, W: int, H: int, out_t: float) -> tuple[QRectF, QRectF]:
+    """(rettangolo sorgente da prelevare, rettangolo di destinazione nel frame W×H)."""
+    x0, y0 = src_w * im.crop_l, src_h * im.crop_t
+    cw = max(1.0, src_w * (1 - im.crop_l - im.crop_r))
+    ch = max(1.0, src_h * (1 - im.crop_t - im.crop_b))
+    z, cx, cy = view_transform(im, out_t)
+    if im.kenburns:
+        # l'export adatta prima il frame a W×H e poi zooma: il rettangolo visibile è quello dell'immagine adattata
+        dst_full, _ = _fit(cw, ch, W, H, im.vertical_mode)
+        src = QRectF(x0, y0, cw, ch)
+        vis_w, vis_h = W / z, H / z
+        vx = min(max(0.0, cx * W - vis_w / 2), W - vis_w)
+        vy = min(max(0.0, cy * H - vis_h / 2), H - vis_h)
+        # frame adattato → coordinate sorgente
+        fx, fy = dst_full.x(), dst_full.y()
+        sx = cw / dst_full.width()
+        sy = ch / dst_full.height()
+        r = QRectF(x0 + (vx - fx) * sx, y0 + (vy - fy) * sy, vis_w * sx, vis_h * sy)
+        return _clip_to(r, src, QRectF(0, 0, W, H), vx, vy, vis_w, vis_h, dst_full)
+    if z > 1.001:
+        vw, vh = cw / z, ch / z
+        vx = min(max(0.0, cx * cw - vw / 2), cw - vw)
+        vy = min(max(0.0, cy * ch - vh / 2), ch - vh)
+        cw2, ch2 = vw, vh
+        x0, y0 = x0 + vx, y0 + vy
+        cw, ch = cw2, ch2
+    dst, src_crop = _fit(cw, ch, W, H, im.vertical_mode)
+    src = QRectF(x0 + src_crop.x(), y0 + src_crop.y(), src_crop.width(), src_crop.height()) if src_crop else QRectF(x0, y0, cw, ch)
+    return src, dst
+
+
+def _fit(cw: float, ch: float, W: int, H: int, mode: str) -> tuple[QRectF, QRectF | None]:
+    """(destinazione, porzione sorgente relativa se si ritaglia, altrimenti None)."""
+    ar_s, ar_o = cw / ch, W / H
+    if abs(ar_s - ar_o) < 0.01:
+        return QRectF(0, 0, W, H), None
+    if mode == "crop":
+        if ar_s > ar_o:
+            w = ch * ar_o
+            return QRectF(0, 0, W, H), QRectF((cw - w) / 2, 0, w, ch)
+        h = cw / ar_o
+        return QRectF(0, 0, W, H), QRectF(0, (ch - h) / 2, cw, h)
+    if ar_s > ar_o:
+        h = W / ar_s
+        return QRectF(0, (H - h) / 2, W, h), None
+    w = H * ar_s
+    return QRectF((W - w) / 2, 0, w, H), None
+
+
+def _clip_to(r, src, frame, vx, vy, vis_w, vis_h, dst_full):
+    """Ken Burns: parte visibile del frame adattato, ritagliata ai bordi dell'immagine."""
+    vis = QRectF(vx, vy, vis_w, vis_h).intersected(dst_full)
+    sx = src.width() / dst_full.width()
+    sy = src.height() / dst_full.height()
+    s = QRectF(src.x() + (vis.x() - dst_full.x()) * sx, src.y() + (vis.y() - dst_full.y()) * sy,
+               vis.width() * sx, vis.height() * sy)
+    d = QRectF((vis.x() - vx) / vis_w * frame.width(), (vis.y() - vy) / vis_h * frame.height(),
+               vis.width() / vis_w * frame.width(), vis.height() / vis_h * frame.height())
+    return s, d

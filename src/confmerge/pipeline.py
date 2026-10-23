@@ -30,6 +30,8 @@ class AnalysisReport:
     order_method: str
     gaps: list[GapWarning]
     warnings: list[str] = field(default_factory=list)
+    cam: np.ndarray | None = None   # audio camera 8 kHz mono (per forma d'onda)
+    ext: np.ndarray | None = None   # audio esterno 8 kHz mono
 
 
 def _check_cancel(cancel: threading.Event | None) -> None:
@@ -38,7 +40,7 @@ def _check_cancel(cancel: threading.Event | None) -> None:
 
 
 def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noop,
-            cancel: threading.Event | None = None) -> AnalysisReport:
+            cancel: threading.Event | None = None, keep_order: bool = False) -> AnalysisReport:
     if not video_paths:
         raise FFmpegError("Nessun video selezionato")
     progress("Lettura dei metadati…", 0.0)
@@ -48,7 +50,7 @@ def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noo
         if not info.has_video:
             raise FFmpegError(f"«{p.name}» non contiene un video")
         infos.append(info)
-    ordered, method = order_clips(infos)
+    ordered, method = (infos, "manuale") if keep_order else order_clips(infos)
     gaps = find_gaps(ordered)
     warnings = [g.message() for g in gaps]
     total = sum(c.duration for c in ordered)
@@ -96,7 +98,7 @@ def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noo
     else:
         warnings.append("Nessun parlato sostenuto rilevato: nessun taglio suggerito.")
     progress("Analisi completata", 1.0)
-    return AnalysisReport(proj, ordered, method, gaps, warnings)
+    return AnalysisReport(proj, ordered, method, gaps, warnings, cam, ext)
 
 
 # ----------------------------------------------------------------------------- export

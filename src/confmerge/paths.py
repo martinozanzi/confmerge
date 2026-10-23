@@ -57,3 +57,15 @@ def setup_logging(verbose: bool = False) -> Path:
         force=True,
     )
     return log_file
+
+
+def cleanup_stale() -> None:
+    """Rimuove le cartelle temporanee di esecuzioni precedenti interrotte (es. crash)."""
+    import time
+    root = Path(tempfile.gettempdir())
+    for d in root.glob("ConfMerge-*"):
+        try:
+            if d.is_dir() and time.time() - d.stat().st_mtime > 3600:
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass

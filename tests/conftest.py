@@ -21,3 +21,9 @@ def make_world(seconds: float, seed: int = 0, fs: int = FS) -> np.ndarray:
 @pytest.fixture
 def world():
     return make_world(300, seed=1)
+
+
+@pytest.fixture(scope="session")
+def qt_app():
+    from PySide6.QtWidgets import QApplication
+    return QApplication.instance() or QApplication([])
