@@ -13,6 +13,7 @@ from ..media_scan import media_info
 from ..project import Project
 from ..worker import Worker
 from .about import AboutDialog
+from .brand import app_icon, logo_pixmap
 from .export_page import ExportPage
 from .graphics_page import CreditTab, GraphicsPage, ProfileBar
 from .pages import AnalysisPage, ReviewPage, SelectPage
@@ -26,6 +27,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.state = state or AppState()
         self.setWindowTitle("ConfMerge")
+        self.setWindowIcon(app_icon())
         self.resize(1280, 820)
         self.setMinimumSize(1100, 700)
         self.stack = QStackedWidget()
@@ -39,8 +41,18 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(p)
         central = QWidget()
         lay = QVBoxLayout(central)
+        brand = QHBoxLayout()
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap(28))
+        logo.setToolTip("ConfMerge")
+        name = QLabel("ConfMerge")
+        name.setProperty("role", "h2")
+        brand.addWidget(logo)
+        brand.addWidget(name)
+        brand.addStretch(1)
         self.crumb = QLabel()
-        lay.addWidget(self.crumb)
+        brand.addWidget(self.crumb)
+        lay.addLayout(brand)
         lay.addWidget(self.stack, 1)
         row = QHBoxLayout()
         self.back = QPushButton("◀ Indietro")

@@ -24,7 +24,7 @@ def scrolled(w: QWidget) -> QScrollArea:
     sa = QScrollArea()
     sa.setWidgetResizable(True)
     sa.setFrameShape(QFrame.NoFrame)
-    sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)   # mai contenuto tagliato in silenzio
     sa.setWidget(w)
     return sa
 
@@ -364,7 +364,9 @@ class LowerThirdTab(QWidget):
         super().__init__(parent)
         self.state, self.page = state, page
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("Un lower third per relatore, con tempi propri (secondi dall'inizio del video di uscita)."))
+        hint = QLabel("Un lower third per relatore, con tempi propri (secondi dall'inizio del video di uscita).")
+        hint.setWordWrap(True)
+        lay.addWidget(hint)
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Nome", "Ruolo", "Inizio (s)", "Durata (s)"])
         self.table.horizontalHeader().setStretchLastSection(True)
@@ -479,6 +481,7 @@ class SlidesTab(QWidget):
         top.addStretch(1)
         lay.addLayout(top)
         self.src = QLabel()
+        self.src.setWordWrap(True)
         lay.addWidget(self.src)
         split = QHBoxLayout()
         g = Section("Cambi slide (premi N nella Revisione mentre guardi il video)", "g:slide-changes")
@@ -645,8 +648,11 @@ class CreditTab(QWidget):
             self.f.removeRow(0)
         c = self.state.spec.credit
         cb = self.state.touch
-        self.f.addRow(QLabel(f"Dopo la schermata finale: «{CREDIT_TEXT}» e il link al repository (in inglese, su fondo nero, "
-                             "con dissolvenza in entrata e uscita). L'impostazione è salvata nel profilo."))
+        info = QLabel(f"Dopo la schermata finale: «{CREDIT_TEXT}» e il link al repository (in inglese, su fondo nero, "
+                      "con dissolvenza in entrata e uscita). L'impostazione è salvata nel profilo.")
+        info.setWordWrap(True)
+        info.setProperty("role", "muted")
+        self.f.addRow(info)
         self.f.addRow(bind.check(c, "enabled", "Aggiungi il credito «Created with ConfMerge»", cb))
         self.f.addRow("Durata (s, 2–5)", bind.spin(c, "duration", 2, 5, 0.5, 1, "", 1, cb))
         self.f.addRow(bind.check(c, "qr", "Mostra anche un QR code del repository", cb))
