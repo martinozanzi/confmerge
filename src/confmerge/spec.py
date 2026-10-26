@@ -1,0 +1,178 @@
+"""Specifica completa di rendering (immagine, audio, grafica, slide, credito, export)."""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from .render.model import Element, LowerThird, Scene
+from .serde import from_dict, to_dict
+
+RES_SHORT = {"720p": 720, "1080p": 1080, "1440p": 1440, "4K": 2160}
+ASPECTS = {"16:9": (16, 9), "4:3": (4, 3), "1:1": (1, 1), "9:16": (9, 16)}
+LAYOUTS = {
+    "speaker": "Solo relatore",
+    "slide_full": "Slide a schermo intero, relatore in piccolo",
+    "speaker_full": "Relatore a schermo intero, slide in piccolo",
+    "side_by_side": "Affiancati",
+}
+PRESETS = ["YouTube 1080p", "YouTube 1440p", "YouTube 4K", "Veloce (copia stream)", "Personalizzato"]
+
+
+@dataclass
+class ImageSettings:
+    resolution: str = "1080p"
+    aspect: str = "16:9"
+    custom_w: float = 16.0
+    custom_h: float = 9.0
+    fps: float | None = None
+    crop_l: float = 0.0
+    crop_t: float = 0.0
+    crop_r: float = 0.0
+    crop_b: float = 0.0
+    zoom: float = 1.0
+    cx: float = 0.5
+    cy: float = 0.5
+    kenburns: bool = False
+    zoom2: float = 1.3
+    cx2: float = 0.5
+    cy2: float = 0.5
+    kb_t0: float = 0.0
+    kb_t1: float = 10.0
+    vertical_mode: str = "bars"   # bars | crop
+    fade_in: float = 0.0          # video + audio
+    fade_out: float = 0.0
+
+
+@dataclass
+class AudioSettings:
+    loudnorm: bool = True
+    highpass: bool = False
+    denoise: bool = False
+    compressor: bool = False
+
+
+@dataclass
+class PipSettings:
+    corner: str = "br"            # tl | tr | bl | br
+    size: float = 0.28            # frazione della larghezza
+    margin: float = 0.03
+    border: float = 0.004
+    border_color: str = "#FFFFFF"
+    radius: float = 0.012
+    shadow: bool = True
+
+
+@dataclass
+class LayoutSpan:
+    t: float = 0.0
+    layout: str = "speaker"
+
+
+@dataclass
+class SlideChange:
+    t: float = 0.0
+    index: int = 0
+
+
+@dataclass
+class SlideSettings:
+    enabled: bool = False
+    files: list[str] = field(default_factory=list)    # PDF o immagini
+    video: str = ""                                    # in alternativa: secondo video (cattura schermo)
+    video_offset: float = 0.0                          # sync: video_slide(t) ≈ camera(t + offset)
+    changes: list[SlideChange] = field(default_factory=list)
+    layouts: list[LayoutSpan] = field(default_factory=lambda: [LayoutSpan(0.0, "slide_full")])
+    pip: PipSettings = field(default_factory=PipSettings)
+
+
+@dataclass
+class CreditSettings:
+    enabled: bool = True
+    duration: float = 3.0
+    qr: bool = False
+
+
+@dataclass
+class ExportSettings:
+    preset: str = "YouTube 1080p"
+    custom_height: int = 1080
+    bitrate_mbps: float | None = None   # None = valore del preset
+    crf_mode: bool = False
+    crf: int = 18
+    audio_kbps: int | None = None
+    encoder: str = "auto"               # auto | libx264 | h264_nvenc | h264_qsv | h264_amf
+    out_dir: str = ""
+    name: str = "conferenza"
+
+
+@dataclass
+class Graphics:
+    elements: list[Element] = field(default_factory=list)
+    lower_thirds: list[LowerThird] = field(default_factory=list)
+    title: Scene = field(default_factory=lambda: Scene(enabled=False, duration=4.0))
+    outro: Scene = field(default_factory=lambda: Scene(enabled=False, duration=4.0))
+
+
+@dataclass
+class RenderSpec:
+    image: ImageSettings = field(default_factory=ImageSettings)
+    audio: AudioSettings = field(default_factory=AudioSettings)
+    graphics: Graphics = field(default_factory=Graphics)
+    slides: SlideSettings = field(default_factory=SlideSettings)
+    credit: CreditSettings = field(default_factory=CreditSettings)
+    export: ExportSettings = field(default_factory=ExportSettings)
+
+    def to_dict(self) -> dict:
+        return to_dict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "RenderSpec":
+        return from_dict(cls, d)
+
+
+def output_size(img: ImageSettings, export: ExportSettings | None = None) -> tuple[int, int]:
+    """Dimensioni di uscita (pari). La risoluzione indica il lato corto."""
+    short = RES_SHORT.get(img.resolution, 1080)
+    if export is not None and export.preset == "YouTube 1440p":
+        short = 1440
+    elif export is not None and export.preset == "YouTube 4K":
+        short = 2160
+    elif export is not None and export.preset == "YouTube 1080p":
+        short = 1080
+    elif export is not None and export.preset == "Personalizzato":
+        short = export.custom_height
+    aw, ah = (img.custom_w, img.custom_h) if img.aspect == "custom" else ASPECTS.get(img.aspect, (16, 9))
+    ar = aw / ah
+    if ar >= 1:
+        h = short
+        w = round(h * ar)
+    else:
+        w = short
+        h = round(w / ar)
+    return w // 2 * 2, h // 2 * 2
+
+
+def video_bitrate_bps(export: ExportSettings, h_short: int, fps: float) -> float:
+    if export.bitrate_mbps:
+        return export.bitrate_mbps * 1e6
+    hi = fps > 30.5
+    table = {720: (5.0, 7.5), 1080: (8.0, 12.0), 1440: (16.0, 24.0), 2160: (35.0, 53.0)}
+    key = min(table, key=lambda k: abs(k - h_short))
+    return table[key][1 if hi else 0] * 1e6
+
+
+def audio_bitrate_bps(export: ExportSettings, h_short: int) -> float:
+    if export.audio_kbps:
+        return export.audio_kbps * 1000.0
+    return 320_000.0 if h_short >= 2160 else 256_000.0 if h_short >= 1440 else 192_000.0
+
+
+def view_transform(img: ImageSettings, t: float) -> tuple[float, float, float]:
+    """(zoom, cx, cy) al tempo t (secondi di uscita). Stessa funzione usata dall'anteprima."""
+    if not img.kenburns:
+        return img.zoom, img.cx, img.cy
+    span = max(img.kb_t1 - img.kb_t0, 1e-3)
+    p = min(1.0, max(0.0, (t - img.kb_t0) / span))
+    s = p * p * (3 - 2 * p)
+    return (img.zoom + (img.zoom2 - img.zoom) * s,
+            img.cx + (img.cx2 - img.cx) * s,
+            img.cy + (img.cy2 - img.cy) * s)

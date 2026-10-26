@@ -1,0 +1,98 @@
+ConfMerge - Notices of third-party software
+===========================================
+
+ConfMerge is released under the MIT License (see LICENSE), Copyright (c) 2026 Martino Zanzi.
+Source code: https://github.com/martinozanzi/confmerge
+
+This distribution (the executable / folder) includes or invokes the components below. Each one is
+distributed under its own license, reproduced or linked here. ConfMerge runs ffmpeg/ffprobe as separate
+processes; it does not link against them.
+
+-------------------------------------------------------------------------------
+1. Qt 6 and PySide6 (Qt for Python) - LGPL-3.0-only (also GPL / commercial)
+-------------------------------------------------------------------------------
+Used for the user interface, painting (QPainter), PDF rendering (QtPdf), SVG and media playback.
+Version bundled: PySide6 6.12.0 (PySide6-Essentials, PySide6-Addons, pyside6-pdf; see requirements.txt).
+  Project:  https://wiki.qt.io/Qt_for_Python
+  Sources:  https://code.qt.io/cgit/pyside/pyside-setup.git/  and  https://download.qt.io/official_releases/qt/
+  License:  https://www.gnu.org/licenses/lgpl-3.0.html
+Qt and PySide6 are used unmodified and linked dynamically. In the "onedir" package the Qt/PySide6 libraries
+are separate files that you may replace with another compatible build (LGPL relinking right). In the "onefile"
+package the same files are embedded in the executable; you may extract them or rebuild ConfMerge from source
+(build.bat) with a different PySide6 version. QtPdf is based on the PDFium library (BSD-3-Clause,
+https://pdfium.googlesource.com/pdfium/).
+shiboken6 (binding generator runtime) - LGPL-3.0 - same sources as above.
+
+-------------------------------------------------------------------------------
+2. NumPy - BSD-3-Clause
+-------------------------------------------------------------------------------
+  https://numpy.org   Source: https://github.com/numpy/numpy
+  License: https://github.com/numpy/numpy/blob/main/LICENSE.txt
+The NumPy wheels also bundle OpenBLAS (BSD-3-Clause) and, on some builds, parts of the GCC runtime
+(GPL-3.0 with the GCC Runtime Library Exception). See LICENSES_bundled.txt inside the numpy package.
+
+-------------------------------------------------------------------------------
+3. SciPy - BSD-3-Clause
+-------------------------------------------------------------------------------
+  https://scipy.org   Source: https://github.com/scipy/scipy
+  License: https://github.com/scipy/scipy/blob/main/LICENSE.txt
+Bundled third-party code is listed in LICENSES_bundled.txt inside the scipy package.
+
+-------------------------------------------------------------------------------
+4. FFmpeg and ffprobe - GPL-3.0-or-later (this build includes libx264)
+-------------------------------------------------------------------------------
+Static Windows build downloaded by build.bat (default: "release essentials" from gyan.dev,
+https://www.gyan.dev/ffmpeg/builds/). The exact version string of the build included in your copy is written
+to bin/ffmpeg-version.txt (shown by "ffmpeg -version", together with the configure flags).
+Because this build is configured with --enable-gpl and --enable-libx264 it is licensed under the GNU GPL
+version 3 or later:  https://www.gnu.org/licenses/gpl-3.0.html
+  FFmpeg sources:  https://ffmpeg.org/download.html  (release tarballs: https://ffmpeg.org/releases/)
+  Build scripts and corresponding source of this build: https://www.gyan.dev/ffmpeg/builds/
+  x264 (GPL-2.0-or-later): https://www.videolan.org/developers/x264.html
+  FFmpeg legal information: https://ffmpeg.org/legal.html
+Other libraries contained in the build (e.g. libx265, libvpx, libopus, libmp3lame, libass, zlib...) carry
+their own licenses, listed in the license file shipped with the build (bin/FFMPEG-LICENSE.txt when available).
+If you replace bin/ffmpeg.exe and bin/ffprobe.exe with another build, ConfMerge keeps working.
+FFmpeg is a trademark of Fabrice Bellard, originator of the FFmpeg project.
+
+-------------------------------------------------------------------------------
+5. python-qrcode ("qrcode") - BSD-3-Clause
+-------------------------------------------------------------------------------
+Used only to compute the QR matrix (the image is drawn with QPainter).
+  https://github.com/lincolnloop/python-qrcode
+
+-------------------------------------------------------------------------------
+5b. Inter (font) - SIL Open Font License 1.1
+-------------------------------------------------------------------------------
+Copyright (c) 2016 The Inter Project Authors (https://github.com/rsms/Inter).
+Files bundled: Inter-Regular, Inter-Medium, Inter-SemiBold, Inter-Bold (.ttf) in confmerge/resources/fonts,
+unmodified; the license text is in confmerge/resources/fonts/Inter-OFL.txt.
+  https://rsms.me/inter/   License: https://openfontlicense.org
+
+-------------------------------------------------------------------------------
+5c. Lucide (icons) - ISC License
+-------------------------------------------------------------------------------
+Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).
+All other copyright (c) for Lucide are held by Lucide Contributors 2022.
+A subset of the SVG icons (lucide-static 0.468.0) is bundled in confmerge/resources/icons, unmodified;
+the license text is in confmerge/resources/icons/LUCIDE-LICENSE.txt.
+  https://lucide.dev   Source: https://github.com/lucide-icons/lucide
+
+-------------------------------------------------------------------------------
+6. Python - Python Software Foundation License
+-------------------------------------------------------------------------------
+The interpreter and standard library embedded in the executable.  https://docs.python.org/3/license.html
+
+-------------------------------------------------------------------------------
+7. PyInstaller - GPL-2.0-or-later with the bootloader exception
+-------------------------------------------------------------------------------
+Used to build the executable; its bootloader is embedded in it. The exception allows distributing the
+resulting program under any license.  https://pyinstaller.org   https://github.com/pyinstaller/pyinstaller
+
+-------------------------------------------------------------------------------
+8. Optional: webrtcvad - MIT   (not bundled)
+-------------------------------------------------------------------------------
+If installed (pip install webrtcvad) it improves speech detection; otherwise an adaptive RMS threshold is used.
+  https://github.com/wiseman/py-webrtcvad
+
+All trademarks belong to their respective owners. This software is provided "as is", without warranty.
