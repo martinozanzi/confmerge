@@ -46,6 +46,13 @@ def find_problems(root: QWidget, tag: str) -> list[dict]:
         if not w.isVisible() or w.property("overlay"):
             continue
         name = f"{type(w).__name__}:{w.objectName() or (w.text()[:20] if hasattr(w, 'text') and callable(w.text) else '')}"
+        # scorrimento orizzontale = contenuto più largo dello spazio disponibile (cose tagliate)
+        if isinstance(w, QAbstractScrollArea) and w.horizontalScrollBar().isVisible() and w.horizontalScrollBar().maximum() > 0:
+            inner = w.widget() if hasattr(w, "widget") else None
+            out.append({"tag": tag, "kind": "scorrimento-orizzontale", "widget": name,
+                        "eccesso": w.horizontalScrollBar().maximum(),
+                        "contenuto": type(inner).__name__ if inner else "", "visibile": w.viewport().width(),
+                        "minimo-contenuto": inner.minimumSizeHint().width() if inner else 0})
         # testo tagliato
         if isinstance(w, (QLabel, QAbstractButton)) and w.width() > 0:
             hint = w.minimumSizeHint()

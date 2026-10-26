@@ -100,7 +100,7 @@ class ExportPage(QWidget):
         gl.addWidget(self.est_lbl)
         self.warn_lbl = QLabel()
         self.warn_lbl.setWordWrap(True)
-        self.warn_lbl.setStyleSheet("color:#d08000")
+        self.warn_lbl.setProperty("role", "warn")
         gl.addWidget(self.warn_lbl)
         right.addWidget(g)
         row = QHBoxLayout()
@@ -108,8 +108,10 @@ class ExportPage(QWidget):
         self.prev_start.setRange(0, 360000)
         self.prev_start.setSuffix(" s")
         self.prev_start.setToolTip("Inizio dell'anteprima (secondi di uscita)")
-        row.addWidget(QLabel("Anteprima 10 s da"))
-        row.addWidget(self.prev_start)
+        row.addWidget(QLabel("Anteprima di 10 secondi da"))
+        row.addWidget(self.prev_start, 1)
+        right.addLayout(row)
+        row = QHBoxLayout()
         b = QPushButton("▶ Anteprima 10 s")
         b.clicked.connect(self.preview_sample)
         row.addWidget(b)
@@ -137,8 +139,8 @@ class ExportPage(QWidget):
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         right.addWidget(self.table, 1)
         row = QHBoxLayout()
-        for text, fn in (("▲", lambda: self.move(-1)), ("▼", lambda: self.move(1)), ("Annulla elemento", self.cancel_item),
-                         ("▶ Avvia coda", self.start_queue)):
+        for text, fn in (("▲", lambda: self.move(-1)), ("▼", lambda: self.move(1)), ("Annulla", self.cancel_item),
+                         ("▶ Avvia", self.start_queue)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             row.addWidget(b)

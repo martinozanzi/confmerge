@@ -8,6 +8,8 @@ from . import __version__, paths
 
 def main() -> int:
     paths.setup_logging()
+    from . import diagnostics
+    diagnostics.install()
     paths.cleanup_stale()
     from PySide6.QtWidgets import QApplication
     from .ui.main_window import MainWindow

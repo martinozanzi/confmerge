@@ -69,7 +69,7 @@ class Toggle(QAbstractButton):
         return QSize(w, self.heightForWidth(w))
 
     def minimumSizeHint(self) -> QSize:
-        w = self.M * 2 + self.TW + (S1 + 2 + 90 if self.text() else 0)
+        w = self.M * 2 + self.TW + (S1 + 2 + min(70, QFontMetrics(self.font()).horizontalAdvance(self.text())) if self.text() else 0)
         return QSize(w, max(self.TH, QFontMetrics(self.font()).height()) + 2 * self.M + 2)
 
     def paintEvent(self, _):

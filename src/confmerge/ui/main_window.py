@@ -89,9 +89,22 @@ class MainWindow(QMainWindow):
         a.triggered.connect(self.settings_dialog)
         s.addAction(a)
         h = mb.addMenu("&Aiuto")
+        a = QAction("Apri la cartella dei &log", self)
+        a.triggered.connect(lambda: __import__("confmerge.diagnostics", fromlist=["x"]).open_log_folder())
+        h.addAction(a)
+        a = QAction("&Copia informazioni per l'assistenza", self)
+        a.triggered.connect(self.copy_support_info)
+        h.addAction(a)
+        h.addSeparator()
         a = QAction("&Informazioni", self)
         a.triggered.connect(lambda: AboutDialog(self).exec())
         h.addAction(a)
+
+    def copy_support_info(self):
+        from PySide6.QtWidgets import QApplication
+        from .. import diagnostics
+        QApplication.clipboard().setText(diagnostics.support_info())
+        QMessageBox.information(self, "ConfMerge", "Informazioni copiate. Incollale in un messaggio (Ctrl+V) per chiedere assistenza.")
 
     def settings_dialog(self):
         d = QDialog(self)
@@ -172,14 +185,15 @@ class MainWindow(QMainWindow):
             ext = decode_audio_mono(proj.audio, 8000)
             report(0.5, "Creazione dell'anteprima…")
             out = paths.temp_dir() / "proxy.mp4"
-            proxy.build_proxy(proj, clips, out, lambda fr, s: report(0.5 + fr * 0.5), cancel)
-            return clips, np.concatenate(cam), ext, out
+            a, b = proxy.initial_window(proj)
+            proxy.build_window(proj, clips, a, b, out, lambda fr, s: report(0.5 + fr * 0.5), cancel)
+            return clips, np.concatenate(cam), ext, out, (a, b)
 
         w = Worker(job)
         w.progress.connect(lambda fr, m: (self.analysis.bar.setValue(int(fr * 1000)), m and self.analysis.msg.setText(m)))
 
         def ok(res):
-            st.clips, st.cam, st.ext, st.proxy = res
+            st.clips, st.cam, st.ext, st.proxy, st.proxy_range = res
             st.load_project(proj)
             self.show_step(2)
         w.finished_ok.connect(ok)

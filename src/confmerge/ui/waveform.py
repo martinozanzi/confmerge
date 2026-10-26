@@ -91,8 +91,8 @@ class WaveformWidget(QWidget):
                     p.drawLine(QPointF(x, mid - hi[x] / amp * (bot - top) * 0.45),
                                QPointF(x, mid - lo[x] / amp * (bot - top) * 0.45))
             p.setPen(QColor("#889"))
-            p.drawText(4, 12, "camera")
-            p.drawText(4, h // 2 + 12, "audio esterno (allineato)")
+            p.drawText(4, 14, "Telecamera")
+            p.drawText(4, h // 2 + 14, "Registrazione (spostata come impostato)")
         if self.suggest:
             p.fillRect(QRectF(self._x(self.suggest[0]), 0, self._x(self.suggest[1]) - self._x(self.suggest[0]), h),
                        QColor(80, 200, 120, 30))

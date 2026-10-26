@@ -70,11 +70,12 @@ class ThumbnailDialog(QDialog):
 
     def fill_candidates(self):
         st = self.state
-        if not st.proxy or not st.project:
+        if not st.clips or not st.project:
             return
         for t in thumbnail.suggest_times(st.trim_start, st.trim_end):
             try:
-                img = thumbnail.grab_frame(st.proxy, t, paths.temp_dir() / f"cand_{int(t)}.png", 320)
+                clip, local = thumbnail.locate(st.clips, t)
+                img = thumbnail.grab_frame(clip.path, local, paths.temp_dir() / f"cand_{int(t)}.png", 320)
             except FFmpegError:
                 continue
             it = QListWidgetItem(QIcon(QPixmap.fromImage(img)), f"{t:.0f} s")
