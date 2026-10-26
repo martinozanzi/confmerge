@@ -1,5 +1,9 @@
 numpy>=1.26
 scipy>=1.11
-PySide6==6.8.3
+# Qt: pacchetti separati (da 6.12 QtPdf sta in pyside6-pdf). Non usare il meta-pacchetto "PySide6": porta WebEngine (centinaia di MB).
+PySide6-Essentials==6.12.0
+PySide6-Addons==6.12.0
+pyside6-pdf==6.12.0.140
+shiboken6==6.12.0
 qrcode>=7.4
 # Opzionale (migliora il rilevamento del parlato se installabile): webrtcvad

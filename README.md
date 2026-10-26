@@ -21,7 +21,7 @@ Avvia `ConfMerge.exe` e segui le schermate: **Selezione → Analisi → Revision
 
 Impostazioni e profili: `%APPDATA%\ConfMerge`. Log: `%LOCALAPPDATA%\ConfMerge\confmerge.log`.
 
-## Build (Windows 10/11, serve solo Python 3.11+)
+## Build (Windows 10/11, serve solo Python 3.11–3.14)
 ```
 build.bat            (onefile + onedir)
 build.bat onefile    dist\onefile\ConfMerge.exe   – un solo file, con splash
@@ -40,7 +40,7 @@ python -m confmerge analyze CARTELLA -o lavoro.confmerge
 python -m confmerge export lavoro.confmerge -o uscita.mp4 --accept-trim
 python -m pytest
 ```
-Per le slide PDF si usa solo QtPdf di PySide6 (nessun PyMuPDF). PySide6 è fissato a 6.8.3.
+Per le slide PDF si usa solo QtPdf di PySide6 (nessun PyMuPDF). Qt (PySide6 6.12.0) è fissato in `requirements.txt`; funziona con Python 3.11–3.14 (provato su 3.13 e 3.14).
 
 ## Architettura
 Tutti gli elementi grafici sono disegnati con QPainter su QImage RGBA (`render/`), con la stessa funzione per

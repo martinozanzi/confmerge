@@ -2,7 +2,7 @@
 rem ============================================================================
 rem  ConfMerge - build per Windows 10/11
 rem  Uso:  build.bat [onefile|onedir|all]      (predefinito: all)
-rem  Richiede solo Python 3.11+ (python.org). Crea l'ambiente virtuale, installa
+rem  Richiede solo Python 3.11-3.14 (python.org). Crea l'ambiente virtuale, installa
 rem  le dipendenze, scarica ffmpeg/ffprobe statici (se mancano in bin\) e produce:
 rem    dist\onefile\ConfMerge.exe     (un solo file, con splash screen)
 rem    dist\onedir\ConfMerge\         (cartella: avvio piu' veloce)
@@ -12,14 +12,18 @@ cd /d "%~dp0"
 set TARGET=%1
 if "%TARGET%"=="" set TARGET=all
 
-rem --- Python
+rem --- Python: sceglie la versione piu' recente supportata (3.14 ... 3.11)
 set PYEXE=
-where py >nul 2>nul && set PYEXE=py -3
-if "%PYEXE%"=="" (where python >nul 2>nul && set PYEXE=python)
-if "%PYEXE%"=="" (
-  echo ERRORE: Python 3.11+ non trovato. Installalo da https://www.python.org/downloads/
+for %%V in (3.14 3.13 3.12 3.11) do if not defined PYEXE (py -%%V -c "import sys" >nul 2>nul && set PYEXE=py -%%V)
+if not defined PYEXE (
+  where python >nul 2>nul && python -c "import sys; sys.exit(0 if (3,11)<=sys.version_info[:2]<=(3,14) else 1)" >nul 2>nul && set PYEXE=python
+)
+if not defined PYEXE (
+  echo ERRORE: serve Python 3.11, 3.12, 3.13 o 3.14 ^(trovate: versioni non supportate o nessuna^).
+  echo Installalo da https://www.python.org/downloads/ ^(64 bit, spunta "Add python.exe to PATH"^).
   exit /b 1
 )
+echo Uso: %PYEXE%
 
 rem --- ambiente virtuale e dipendenze
 if not exist .venv\Scripts\python.exe (
@@ -27,6 +31,9 @@ if not exist .venv\Scripts\python.exe (
   %PYEXE% -m venv .venv || exit /b 1
 )
 call .venv\Scripts\activate.bat
+python -c "import sys; sys.exit(0 if (3,11)<=sys.version_info[:2]<=(3,14) else 1)" || (
+  echo ERRORE: l'ambiente .venv usa una versione di Python non supportata. Cancella la cartella .venv e rilancia.
+  exit /b 1)
 echo [2/5] Installazione delle dipendenze...
 python -m pip install --upgrade pip >nul
 python -m pip install -r requirements.txt pyinstaller || exit /b 1
