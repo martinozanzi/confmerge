@@ -42,15 +42,11 @@ rem --- ffmpeg statico (build GPL con x264). Per usare un'altra build: mettila i
 if not exist bin mkdir bin
 if not exist bin\ffmpeg.exe (
   echo [3/5] Download di ffmpeg statico...
-  if "%FFMPEG_URL%"=="" set FFMPEG_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
-  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$ErrorActionPreference='Stop'; $z=Join-Path $env:TEMP 'confmerge-ffmpeg.zip'; $d=Join-Path $env:TEMP 'confmerge-ffmpeg';" ^
-    "Invoke-WebRequest -Uri '%FFMPEG_URL%' -OutFile $z; if (Test-Path $d) {Remove-Item -Recurse -Force $d};" ^
-    "Expand-Archive -Path $z -DestinationPath $d; $b=Get-ChildItem -Path $d -Recurse -Filter ffmpeg.exe | Select-Object -First 1;" ^
-    "Copy-Item $b.FullName 'bin\ffmpeg.exe'; Copy-Item (Join-Path $b.DirectoryName 'ffprobe.exe') 'bin\ffprobe.exe';" ^
-    "$l=Get-ChildItem -Path $d -Recurse -Filter LICENSE* | Select-Object -First 1; if ($l) {Copy-Item $l.FullName 'bin\FFMPEG-LICENSE.txt'}" || (
+  powershell -NoProfile -ExecutionPolicy Bypass -File tools\get_ffmpeg.ps1 -Url "%FFMPEG_URL%"
+  if errorlevel 1 (
     echo ERRORE: download di ffmpeg non riuscito. Copia ffmpeg.exe e ffprobe.exe in bin\ e rilancia.
-    exit /b 1)
+    exit /b 1
+  )
 ) else (
   echo [3/5] ffmpeg trovato in bin\ - uso quello.
 )
