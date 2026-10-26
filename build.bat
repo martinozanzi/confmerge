@@ -68,14 +68,14 @@ python -c "import tkinter" 2>nul || (set SPLASH= & echo ATTENZIONE: tkinter non 
 
 if /i "%TARGET%"=="onedir" goto onedir
 echo [4/5] Build onefile...
-python -m PyInstaller %COMMON% %SPLASH% --onefile --distpath dist\onefile --workpath build\onefile --specpath build run_confmerge.py || exit /b 1
+python -m PyInstaller %COMMON% %SPLASH% --onefile --distpath dist\onefile --workpath build\onefile run_confmerge.py || exit /b 1
 copy /y THIRD-PARTY-NOTICES.txt dist\onefile\ >nul
 copy /y LICENSE dist\onefile\LICENSE.txt >nul
 if /i "%TARGET%"=="onefile" goto done
 
 :onedir
 echo [5/5] Build onedir...
-python -m PyInstaller %COMMON% --onedir --distpath dist\onedir --workpath build\onedir --specpath build run_confmerge.py || exit /b 1
+python -m PyInstaller %COMMON% --onedir --distpath dist\onedir --workpath build\onedir run_confmerge.py || exit /b 1
 copy /y THIRD-PARTY-NOTICES.txt dist\onedir\ConfMerge\ >nul
 copy /y LICENSE dist\onedir\ConfMerge\LICENSE.txt >nul
 

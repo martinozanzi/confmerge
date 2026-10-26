@@ -8,3 +8,4 @@ dist/
 bin/ffmpeg.exe
 bin/ffprobe.exe
 .pytest_cache/
+*.spec
