@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import (QFrame, QScrollArea, QAbstractItemView, QGridLayout, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
+from PySide6.QtWidgets import (QLineEdit, QFrame, QScrollArea, QAbstractItemView, QGridLayout, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QInputDialog, QLabel, QListWidget, QMessageBox, QPushButton,
                                QSlider, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
 
@@ -13,7 +13,9 @@ from ..credit import CREDIT_TEXT
 from ..render.model import Anim, Background, Element, Fill, LowerThird, Outline
 from ..spec import ASPECTS, LAYOUTS, RES_SHORT, LayoutSpan, SlideChange, output_size
 from . import bind
-from .widgets import IconButton, SecondaryButton, Section
+from .layer_list import LayerList
+from .mini_timeline import MiniTimeline
+from .widgets import GhostButton, IconButton, PrimaryButton, SecondaryButton, Section, Toggle, label
 from .canvas import Canvas
 from .element_editor import ElementEditor
 from .player import fmt
@@ -214,8 +216,11 @@ class OverlayTab(QWidget):
         self.scene_box = Section("Scena", "g:scene")
         self.scene_form = self.scene_box.form()
         left.addWidget(self.scene_box)
-        self.list = QListWidget()
-        self.list.currentRowChanged.connect(self.pick)
+        self.list = LayerList()
+        self.list.selectedIndex.connect(self.pick)
+        self.list.edited.connect(self.on_edit)
+        self.list.reordered.connect(self._reorder)
+        left.addWidget(label("Livelli: il primo in alto è davanti. Trascina per riordinare.", "caption", True))
         left.addWidget(self.list, 1)
         grid = QGridLayout()
         grid.setSpacing(8)
@@ -227,8 +232,8 @@ class OverlayTab(QWidget):
         left.addLayout(grid)
         row = QHBoxLayout()
         row.setSpacing(8)
-        for ic, tip, fn in (("copy", "Duplica", self.dup), ("arrow-up", "Sposta su", lambda: self.move(-1)),
-                            ("arrow-down", "Sposta giù", lambda: self.move(1)), ("trash-2", "Elimina", self.delete)):
+        for ic, tip, fn in (("copy", "Duplica", self.dup), ("arrow-up", "Porta davanti", lambda: self.move(+1)),
+                            ("arrow-down", "Porta dietro", lambda: self.move(-1)), ("trash-2", "Elimina", self.delete)):
             b = IconButton(ic, tip)
             b.clicked.connect(fn)
             row.addWidget(b)
@@ -269,18 +274,19 @@ class OverlayTab(QWidget):
 
     def refresh(self):
         self._build_scene_form()
+        els = self.elements()
         cur = self.list.currentRow()
-        self.list.blockSignals(True)
-        self.list.clear()
-        names = {"text": "Testo", "image": "Immagine", "shape": "Forma", "bar": "Barra"}
-        for e in self.elements():
-            label = e.text.replace("\n", " ")[:28] if e.kind == "text" else (Path(e.path).name if e.kind == "image" and e.path else "")
-            self.list.addItem(f"{names.get(e.kind, e.kind)} {label}".strip())
-        self.list.blockSignals(False)
-        if self.elements():
-            self.list.setCurrentRow(min(max(cur, 0), len(self.elements()) - 1))
+        self.list.set_elements(els, cur if 0 <= cur < len(els) else (len(els) - 1 if els else -1))
+        if els:
+            self.pick(self.list.currentRow())
         else:
             self.editor.set_element(None)
+
+    def _reorder(self, order: list):
+        els = self.elements()
+        els[:] = [els[i] for i in order]
+        self.refresh()
+        self.on_edit()
 
     def _build_scene_form(self):
         while self.scene_form.rowCount():
@@ -351,6 +357,7 @@ class OverlayTab(QWidget):
             self.on_edit()
 
     def move(self, d: int):
+        """d = +1 porta davanti, -1 porta dietro (indice nella lista degli elementi)."""
         i = self.list.currentRow()
         els = self.elements()
         j = i + d
@@ -362,14 +369,8 @@ class OverlayTab(QWidget):
 
     def on_edit(self):
         i = self.list.currentRow()
-        els = self.elements()
-        if 0 <= i < len(els):
-            e = els[i]
-            names = {"text": "Testo", "image": "Immagine", "shape": "Forma", "bar": "Barra"}
-            label = e.text.replace("\n", " ")[:28] if e.kind == "text" else (Path(e.path).name if e.kind == "image" and e.path else "")
-            it = self.list.item(i)
-            if it:
-                it.setText(f"{names.get(e.kind, e.kind)} {label}".strip())
+        if 0 <= i < len(self.elements()):
+            self.list.update_label(i)
         self.state.touch()
         self.page.canvas.update()
 
@@ -681,56 +682,143 @@ class CreditTab(QWidget):
         self.f.addRow(bind.check(c, "qr", "Mostra anche un QR code del repository", cb))
 
 
+def apply_search(root: QWidget, query: str) -> int:
+    """Ricerca rapida: mostra solo le sezioni che contengono la parola cercata (titolo, etichette, interruttori).
+    Con la ricerca vuota ripristina solo le sezioni nascoste dalla ricerca stessa."""
+    q = query.strip().lower()
+    shown = 0
+    for sec in root.findChildren(Section):
+        if not q:
+            if sec.property("hid_by_search"):
+                sec.setProperty("hid_by_search", False)
+                sec.setVisible(True)
+            continue
+        texts = [sec.header.text()] + [w.text() for w in sec.findChildren(QLabel)] + \
+                [w.text() for w in sec.findChildren(Toggle)] + [w.text() for w in sec.findChildren(QPushButton)]
+        hit = any(q in t.lower() for t in texts if t)
+        if hit:
+            sec.setProperty("hid_by_search", False)
+            sec.setVisible(True)
+            sec.set_open(True)
+            shown += 1
+        elif sec.isVisibleTo(root):
+            sec.setProperty("hid_by_search", True)
+            sec.setVisible(False)
+    return shown
+
+
+TAB_TITLES = {"image": "Immagine", "overlay": "Elementi", "title": "Titolo", "outro": "Finale", "lt": "Lower third",
+              "slides": "Slide e PiP", "credit": "Credito"}
+
+
 class GraphicsPage(QWidget):
-    def __init__(self, state, review_page, parent=None):
+    """Spazio di lavoro con l'anteprima sempre visibile a sinistra e le impostazioni a destra.
+    `kinds` sceglie le schede: la stessa classe serve per Immagine, Grafica e Slide e PiP."""
+
+    def __init__(self, state, review_page, kinds=("image", "overlay", "title", "outro", "lt", "slides", "credit"),
+                 title="Grafica", subtitle="", parent=None):
         super().__init__(parent)
         self.state = state
         self.review = review_page
+        self.kinds = tuple(kinds)
         self.canvas = Canvas(state)
         self.canvas.elementMoved.connect(lambda *_: self.state.touch())
         main = QVBoxLayout(self)
-        main.addWidget(QLabel("<h2>4. Grafica</h2>"))
-        main.addWidget(ProfileBar(state))
+        main.addWidget(label(title, "title"))
+        if subtitle:
+            main.addWidget(label(subtitle, "muted", True))
+        bar = QHBoxLayout()
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Cerca un'impostazione…")
+        self.search.setClearButtonEnabled(True)
+        self.search.setMinimumWidth(260)
+        self.search.setMaximumWidth(360)
+        self.search.textChanged.connect(self._search)
+        bar.addWidget(self.search)
+        bar.addStretch(1)
+        self.undo_btn = IconButton("undo-2", "Annulla (Ctrl+Z)")
+        self.redo_btn = IconButton("redo-2", "Ripristina (Ctrl+Maiusc+Z)")
+        self.undo_btn.clicked.connect(self.state.undo)
+        self.redo_btn.clicked.connect(self.state.redo)
+        bar.addWidget(self.undo_btn)
+        bar.addWidget(self.redo_btn)
+        sv = SecondaryButton("Salva come profilo…", "save", "Salva grafica, credito e impostazioni come profilo con nome")
+        sv.clicked.connect(self._save_profile)
+        bar.addWidget(sv)
+        main.addLayout(bar)
         split = QSplitter(Qt.Horizontal)
         left = QWidget()
         ll = QVBoxLayout(left)
         ll.setContentsMargins(0, 0, 0, 0)
         ll.addWidget(self.canvas, 1)
         trow = QHBoxLayout()
-        trow.addWidget(QLabel("Tempo anteprima:"))
+        trow.addWidget(QLabel("Momento:"))
         self.tslider = QSlider(Qt.Horizontal)
         self.tslider.setRange(0, 1000)
         self.tslider.valueChanged.connect(self._tchanged)
         trow.addWidget(self.tslider, 1)
-        self.tlabel = QLabel("0.0 s")
+        self.tlabel = QLabel("0 s")
         trow.addWidget(self.tlabel)
         ll.addLayout(trow)
-        self.tip = QLabel("Trascina gli elementi sull'anteprima (guide e snap al centro/margini).")
+        self.mini = MiniTimeline(state)
+        self.mini.timeSelected.connect(self._mini_time)
+        self.mini.setVisible("overlay" in self.kinds)
+        ll.addWidget(self.mini)
+        self.tip = label("Trascina gli elementi sull'anteprima (guide e aggancio al centro e ai margini).", "caption", True)
         ll.addWidget(self.tip)
         split.addWidget(left)
         self.tabs = QTabWidget()
         self.tabs.tabBar().setUsesScrollButtons(False)
         self.tabs.tabBar().setExpanding(False)
         self.tabs.tabBar().setElideMode(Qt.ElideNone)
-        self.image_tab = ImageTab(state, self)
-        self.tabs.addTab(scrolled(self.image_tab), "Immagine")
-        self.ov_main = OverlayTab(state, self, "main")
-        self.ov_title = OverlayTab(state, self, "title")
-        self.ov_outro = OverlayTab(state, self, "outro")
-        self.tabs.addTab(self.ov_main, "Overlay")
-        self.tabs.addTab(self.ov_title, "Titolo")
-        self.tabs.addTab(self.ov_outro, "Finale")
-        self.tabs.addTab(scrolled(LowerThirdTab(state, self)), "Lower third")
-        self.tabs.addTab(scrolled(SlidesTab(state, self)), "Slide e PiP")
-        self.tabs.addTab(scrolled(CreditTab(state)), "Credito")
+        self.image_tab = self.ov_main = self.ov_title = self.ov_outro = None
+        for k in self.kinds:
+            if k == "image":
+                self.image_tab = ImageTab(state, self)
+                self.tabs.addTab(scrolled(self.image_tab), TAB_TITLES[k])
+            elif k == "overlay":
+                self.ov_main = OverlayTab(state, self, "main")
+                self.tabs.addTab(self.ov_main, TAB_TITLES[k])
+            elif k == "title":
+                self.ov_title = OverlayTab(state, self, "title")
+                self.tabs.addTab(self.ov_title, TAB_TITLES[k])
+            elif k == "outro":
+                self.ov_outro = OverlayTab(state, self, "outro")
+                self.tabs.addTab(self.ov_outro, TAB_TITLES[k])
+            elif k == "lt":
+                self.tabs.addTab(scrolled(LowerThirdTab(state, self)), TAB_TITLES[k])
+            elif k == "slides":
+                self.tabs.addTab(scrolled(SlidesTab(state, self)), TAB_TITLES[k])
+            elif k == "credit":
+                self.tabs.addTab(scrolled(CreditTab(state)), TAB_TITLES[k])
+        if len(self.kinds) == 1:
+            self.tabs.tabBar().hide()
         self.tabs.currentChanged.connect(self._tab)
+        self.tabs.setMinimumWidth(545)
         split.addWidget(self.tabs)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 4)
         main.addWidget(split, 1)
-        self.canvas.cropChanged.connect(self.image_tab.set_crop)
+        if self.image_tab:
+            self.canvas.cropChanged.connect(self.image_tab.set_crop)
         self.canvas.elementPicked.connect(self._picked)
         state.spec_changed.connect(self.canvas.update)
+        state.spec_changed.connect(self._undo_state)
+        state.profile_changed.connect(self._undo_state)
+        self._undo_state()
+
+    def _undo_state(self):
+        self.undo_btn.setEnabled(self.state.can_undo)
+        self.redo_btn.setEnabled(self.state.can_redo)
+
+    def _save_profile(self):
+        name, ok = QInputDialog.getText(self, "Salva come profilo", "Nome del profilo (es. canale o evento):",
+                                        text=self.state.profile_name)
+        if ok and name.strip():
+            self.state.save_profile(name.strip())
+
+    def _search(self, q: str):
+        apply_search(self.tabs.currentWidget(), q)
 
     def review_pos(self) -> float:
         return self.review.player.position()
@@ -747,10 +835,10 @@ class GraphicsPage(QWidget):
         c.scene = None
         c.scene_target = "main"
         c.elements_override = None
-        if w is self.ov_title:
+        if self.ov_title is not None and w is self.ov_title:
             c.mode, c.scene, c.scene_target = "scene", self.state.spec.graphics.title, "title"
             c.seg_dur = c.scene.duration
-        elif w is self.ov_outro:
+        elif self.ov_outro is not None and w is self.ov_outro:
             c.mode, c.scene, c.scene_target = "scene", self.state.spec.graphics.outro, "outro"
             c.seg_dur = c.scene.duration
         else:
@@ -760,6 +848,7 @@ class GraphicsPage(QWidget):
         self._range()
         c.set_frame(self.state.last_frame)
         c.update()
+        self._search(self.search.text())
 
     def _range(self):
         c = self.canvas
@@ -767,6 +856,7 @@ class GraphicsPage(QWidget):
             self._max_t = c.scene.duration
         else:
             self._max_t = max(1.0, self.state.trim_end - self.state.trim_start) if self.state.project else 30.0
+        self.mini.set_scene(c.scene if c.mode == "scene" else None, self._max_t)
         self.tslider.blockSignals(True)
         self.tslider.setValue(0)
         self.tslider.blockSignals(False)
@@ -776,6 +866,10 @@ class GraphicsPage(QWidget):
         t = v / 1000 * getattr(self, "_max_t", 10.0)
         self.tlabel.setText(f"{t:.1f} s")
         self.canvas.set_time(t)
+        self.mini.set_time(t)
+
+    def _mini_time(self, t: float):
+        self.tslider.setValue(int(t / max(self._max_t, 1e-6) * 1000))
 
     def _picked(self, i: int):
         w = self.tabs.currentWidget()

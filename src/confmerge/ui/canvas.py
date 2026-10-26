@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QWidget
 
 from .. import slides as sl
 from ..render import compositor
-from ..render.model import Element, Scene, lower_third_elements
+from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
 from ..spec import RenderSpec, output_size
 from ..view import source_to_frame
@@ -70,9 +70,10 @@ class Canvas(QWidget):
         if self.elements_override is not None:
             return self.elements_override
         gr = self.state.spec.graphics
-        els = [e for e in gr.elements if "main" in e.targets]
+        vs = self.state.spec.variables
+        els = substitute([e for e in gr.elements if "main" in e.targets], vs)
         for i, lt in enumerate(gr.lower_thirds):
-            els += lower_third_elements(lt, i)
+            els += lower_third_elements(lt, i, vs)
         return els
 
     def frame_size(self) -> tuple[int, int]:
@@ -123,8 +124,9 @@ class Canvas(QWidget):
     def _scene_elements(self) -> list[Element]:
         if not self.scene:
             return []
+        vs = self.state.spec.variables
         extra = [e for e in self.state.spec.graphics.elements if self.scene_target in e.targets]
-        return list(self.scene.elements) + extra
+        return substitute(list(self.scene.elements), vs) + substitute(extra, vs)
 
     def _draw_slides(self, p: QPainter, W: int, H: int) -> None:
         spec = self.state.spec
@@ -211,6 +213,8 @@ class Canvas(QWidget):
         f = self._to_frame(pos)
         els = self._edit_elements()
         for i in range(len(els) - 1, -1, -1):
+            if not els[i].visible or els[i].locked:
+                continue
             b = element_bbox(els[i], W, H)
             if b.contains(f.x() * W, f.y() * H):
                 self._drag_idx = i

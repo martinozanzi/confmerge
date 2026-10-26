@@ -23,6 +23,8 @@ def render_frame(elements: list[Element], W: int, H: int, t: float, seg_dur: flo
     img = base.copy() if base is not None else new_image(W, H)
     p = QPainter(img)
     for el in elements:
+        if not el.visible:
+            continue
         st = state_at(el, t, seg_dur)
         if st is None:
             continue
@@ -106,6 +108,8 @@ def plan_layers(elements: list[Element], W: int, H: int, seg_dur: float, fps: fl
     workdir.mkdir(parents=True, exist_ok=True)
     layers: list[Layer] = []
     for i, el in enumerate(elements):
+        if not el.visible:
+            continue
         a = el.start
         b = seg_dur if el.end is None else min(el.end, seg_dur)
         if b <= a:

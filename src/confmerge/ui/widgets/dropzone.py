@@ -23,7 +23,6 @@ class DropZone(QFrame):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(S4, S4, S4, S4)
         lay.setSpacing(S2)
-        lay.setAlignment(Qt.AlignCenter)
         self.ic = QLabel()
         self.ic.setAlignment(Qt.AlignCenter)
         self.ic.setFixedHeight(56)

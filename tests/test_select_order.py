@@ -25,17 +25,17 @@ def test_order_modes_and_numbering(qt_app, folder, tmp_path):
     from confmerge.ui.pages import SelectPage
     from confmerge.ui.state import AppState
 
-    page = SelectPage(AppState(Settings(tmp_path)))
+    st = AppState(Settings(tmp_path))
+    page = SelectPage(st)
     page.load_folder(folder)
+    m = st.sources
     # predefinito: per data di registrazione → il più vecchio (DJI_0003) è il PRIMO, in alto
     assert names(page) == ["DJI_0003.mp4", "DJI_0002.mp4", "DJI_0001.mp4"]
     assert page.list.item(0).text().startswith("1.  DJI_0003.mp4")
     assert "registrato il" in page.list.item(0).text()
     assert "diverso da quello per nome" in page.summary.text()          # avviso: data e nome non coincidono
-    page.order_seg.setValue("name")
-    page._order_changed("name")
+    m.set_order("name")
     assert names(page) == ["DJI_0001.mp4", "DJI_0002.mp4", "DJI_0003.mp4"]
-    page.list.setCurrentRow(0)
-    page.move(1)                                                         # ▼ → passa a «Manuale»
-    assert page.order_mode == "manual" and names(page)[1] == "DJI_0001.mp4"
+    m.move(0, 1)                                                         # ▼ → passa a «Manuale»
+    assert m.order_mode == "manual" and names(page)[1] == "DJI_0001.mp4"
     assert page.order_seg.value() == "manual"

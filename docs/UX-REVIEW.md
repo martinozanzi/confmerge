@@ -20,10 +20,10 @@ Stato: cosa ho trovato guardando l'app com'era dopo la Fase 1 del restyling, cos
 | 6 | Contenuti tagliati a destra, toggle con anello tagliato | **Corretto**, con controllo automatico (anche barre di scorrimento orizzontali) |
 | 7 | Ordine dei video ambiguo | **Corretto**: elenco numerato con data, criterio selezionabile e avviso |
 | 8 | Errori invisibili all'utente (nessun log degli errori Python) | **Corretto**: log con rotazione, errori non gestiti, arresti di Qt; menu Aiuto → cartella dei log / copia informazioni |
-| 9 | Troppe schede tecniche (CRF, bitrate, encoder, LUFS, afftdn) nella schermata Export | **Da fare** (modalità Semplice, Fase 3) |
-| 10 | Breadcrumb testuale al posto di una navigazione chiara | **Da fare** (barra laterale, Fase 2) |
-| 11 | Messaggi in inglese/tecnici residui (es. nomi di filtri, "0 = preset") | **Da fare**, in Fase 2/3 |
-| 12 | Schermata Export con due colonne dense | **Da fare** (Fase 2: sezioni comprimibili; Fase 3: 3 scelte semplici) |
+| 9 | Troppe schede tecniche (CRF, bitrate, encoder, LUFS, afftdn) nella schermata Export | **Corretto**: modalità Semplice (3 scelte) e, in Avanzata, parametri tecnici in «Avanzate» chiuse; l'Audio ha frasi semplici |
+| 10 | Breadcrumb testuale al posto di una navigazione chiara | **Corretto**: barra laterale con stato delle fasi (Avanzata) e indicatore a 3 passi (Semplice) |
+| 11 | Messaggi in inglese/tecnici residui (es. nomi di filtri, "0 = preset") | **Corretto**: «Automatico», CRF solo se attivato, LUFS/afftdn spiegati o nascosti |
+| 12 | Schermata Export con due colonne dense | **Corretto**: sezioni comprimibili, stato vuoto della coda, colonne che si impilano nelle finestre strette |
 
-## Cosa resta per la modalità Semplice
-Tre schermate ampie (cartella → controlla → esporta), tre qualità con nomi semplici, un interruttore "Volume uniforme per YouTube", stima di tempo e dimensione ben visibile, schermata finale con «Apri cartella / Apri video / Crea miniatura / Nuovo progetto».
+## Stato
+Tutti i punti sono stati affrontati. Restano da provare su un PC Windows reale (DPI, barra del titolo scura, installazione pulita) e con file DJI veri.

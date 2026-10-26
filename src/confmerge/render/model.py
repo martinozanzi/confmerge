@@ -62,6 +62,8 @@ class Element:
     start: float = 0.0            # secondi nel segmento di destinazione
     end: float | None = None      # None = fino alla fine del segmento
     targets: list[str] = field(default_factory=lambda: ["main"])
+    visible: bool = True          # «occhio» del pannello livelli
+    locked: bool = False          # «lucchetto»: non si sposta col mouse
     anim_in: Anim = field(default_factory=Anim)
     anim_out: Anim = field(default_factory=Anim)
     # testo
@@ -140,8 +142,38 @@ class LowerThird:
     anim_out: Anim = field(default_factory=lambda: Anim("fade", 0.4, "ease_in_out"))
 
 
-def lower_third_elements(lt: LowerThird, idx: int = 0) -> list[Element]:
+VARIABLES = {"titolo": "Titolo dell'evento", "relatore": "Nome del relatore", "ruolo": "Ruolo del relatore",
+             "data": "Data"}
+
+
+def resolve_text(text: str, variables: dict[str, str] | None) -> str:
+    """Sostituisce i segnaposto {titolo}, {relatore}, {ruolo}, {data}; quelli senza valore diventano vuoti."""
+    if "{" not in text:
+        return text
+    v = variables or {}
+    for k in VARIABLES:
+        text = text.replace("{" + k + "}", v.get(k, ""))
+    return text
+
+
+def substitute(elements: list[Element], variables: dict[str, str] | None) -> list[Element]:
+    """Copie degli elementi con i segnaposto risolti (gli originali non si toccano)."""
+    out = []
+    for e in elements:
+        if e.kind == "text" and "{" in e.text:
+            d = e.to_dict()
+            d["text"] = resolve_text(e.text, variables)
+            out.append(Element.from_dict(d))
+        else:
+            out.append(e)
+    return out
+
+
+def lower_third_elements(lt: LowerThird, idx: int = 0, variables: dict[str, str] | None = None) -> list[Element]:
     """Espande un lower third in elementi (barra accento + box + nome + ruolo)."""
+    lt = LowerThird(**{**lt.__dict__, "name": resolve_text(lt.name, variables), "role": resolve_text(lt.role, variables)})
+    if not lt.name.strip() and not lt.role.strip():
+        return []                      # nessun relatore indicato: niente lower third
     end = lt.start + lt.duration
     common = dict(start=lt.start, end=end, targets=["main"], anim_in=lt.anim_in, anim_out=lt.anim_out)
     cx = lt.x
