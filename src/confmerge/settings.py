@@ -77,6 +77,18 @@ class Settings:
     def duplicate_profile(self, name: str, new_name: str) -> None:
         self.save_profile(new_name, copy.deepcopy(self.load_profile(name)))
 
+    def ensure_starter_profile(self) -> bool:
+        """Al primo avvio crea il profilo di partenza per la modalità Semplice e lo seleziona."""
+        from .profiles import STARTER_NAME, starter_profile
+        if self.data.get("first_run_done"):
+            return False
+        if not any((self.root / "profiles").glob("*.json")):
+            self.save_profile(STARTER_NAME, starter_profile())
+            self.data["current_profile"] = STARTER_NAME
+        self.data["first_run_done"] = True
+        self.save()
+        return True
+
     def delete_profile(self, name: str) -> None:
         self._pfile(name).unlink(missing_ok=True)
 

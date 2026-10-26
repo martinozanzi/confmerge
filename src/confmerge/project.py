@@ -23,6 +23,7 @@ class Project:
     suggested_end: float | None = None
     trim_start: float | None = None                      # confermati dall'utente
     trim_end: float | None = None
+    trim_confirmed: bool = False                         # l'utente ha confermato esplicitamente il taglio (o «tengo tutto»)
     spec: dict = field(default_factory=dict)             # RenderSpec serializzata (grafica, slide, immagine…)
     thumbnail: dict = field(default_factory=dict)
     profile_name: str = ""

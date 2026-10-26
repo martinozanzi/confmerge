@@ -59,6 +59,8 @@ class NavButton(QPushButton):
         self.setProperty("variant", "nav")
         self.setMinimumHeight(48)
         self.setFlat(True)
+        self.setToolTip(text)
+        self.setAccessibleName(text)
 
     def set_state(self, state: str) -> None:
         self._state = state

@@ -110,7 +110,7 @@ def main():
     w.resize(*((1100, 700) if use_min else (1360, 860)))
     w.show()
     problems: list[dict] = []
-    shots = []
+    shots: list[str] = []
 
     def snap(name):
         pump(app)
@@ -118,35 +118,66 @@ def main():
         problems.extend(find_problems(w, name))
         shots.append(name)
 
-    snap("01-selezione-vuota")
-    w.select.load_folder(media)
-    snap("02-selezione")
-    w.go_next()
-    t = time.time()
-    while w.stack.currentIndex() != 2 and time.time() - t < 120:
-        pump(app, 1, 0.05)
-    w.review.apply_suggestion()
+    def wait(cond, secs=120):
+        t = time.time()
+        while not cond() and time.time() - t < secs:
+            pump(app, 1, 0.05)
+
+    # ---------------- modalità SEMPLICE
+    w.set_mode("simple", animate=False)
+    snap("s01-cartella")
+    w.simple.start.use_folder(media)
+    pump(app, 4)
+    snap("s02-analisi")
+    wait(lambda: st.project is not None)
     pump(app, 20)
-    snap("03-revisione")
+    snap("s03-controlla")
+    st.review.apply_suggestion()
+    st.spec.variables.update({"titolo": "Convegno sul futuro della città", "relatore": "Mario Rossi", "ruolo": "Sindaco"})
+    st.touch()
+    pump(app, 10)
+    snap("s04-controlla-confermato")
+    w.simple.show_step(2, animate=False)
+    wait(lambda: st.export.est is not None)
+    snap("s05-esporta")
+    w.simple.export.stack.setCurrentIndex(1)
+    w.simple.export.ring.setValue(0.42)
+    snap("s06-in-corso")
+    w.simple.export.done_title.setText("Il video è pronto!")
+    w.simple.export.done_info.setText("/home/utente/Video/conferenza.mp4\nCi sono voluti 9:12 e il file pesa 2412 MB.")
+    w.simple.export.stack.setCurrentIndex(2)
+    snap("s07-pronto")
+    w.simple.export.stack.setCurrentIndex(0)
+
+    # ---------------- modalità AVANZATA
+    w.set_mode("advanced", animate=False)
     from confmerge.ui.graphics_page import new_element
-    from confmerge.render.model import LowerThird
     el = new_element("text")
     el.text, el.x, el.y = "Evento 2026", 0.8, 0.08
     st.spec.graphics.elements.append(el)
-    st.spec.graphics.lower_thirds.append(LowerThird("Mario Rossi", "Relatore", start=0, duration=20))
+    st.spec.graphics.elements.append(new_element("bar"))
     st.touch()
-    w.go_next()
-    pump(app, 10)
-    for i in range(w.graphics.tabs.count()):
-        w.graphics.tabs.setCurrentIndex(i)
-        if i == 1:
-            w.graphics.ov_main.list.setCurrentRow(0)
-        snap(f"04-grafica-{i + 1}-{w.graphics.tabs.tabText(i).split(',')[0].replace(' ', '-').lower()}")
-    w.go_next()
-    t = time.time()
-    while w.export.est is None and time.time() - t < 120:
-        pump(app, 1, 0.05)
-    snap("05-export")
+    adv = w.adv
+    adv.goto(0, animate=False)
+    snap("a0-sorgenti")
+    adv.goto(1, animate=False)
+    pump(app, 20)
+    snap("a1-sincronia")
+    adv.goto(2, animate=False)
+    snap("a2-immagine")
+    adv.goto(3, animate=False)
+    for i in range(adv.graphics.tabs.count()):
+        adv.graphics.tabs.setCurrentIndex(i)
+        if adv.graphics.tabs.widget(i) is adv.graphics.ov_main:
+            adv.graphics.ov_main.list.setCurrentRow(0)
+        snap(f"a3-grafica-{i + 1}-{adv.graphics.tabs.tabText(i).replace(' ', '-').lower()}")
+    adv.goto(4, animate=False)
+    snap("a4-slide")
+    adv.goto(5, animate=False)
+    snap("a5-audio")
+    adv.goto(6, animate=False)
+    wait(lambda: st.export.est is not None)
+    snap("a6-export")
     print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False))
     w.close()
     os._exit(0)

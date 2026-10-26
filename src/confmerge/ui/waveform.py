@@ -90,9 +90,13 @@ class WaveformWidget(QWidget):
                 for x in range(len(lo)):
                     p.drawLine(QPointF(x, mid - hi[x] / amp * (bot - top) * 0.45),
                                QPointF(x, mid - lo[x] / amp * (bot - top) * 0.45))
-            p.setPen(QColor("#889"))
-            p.drawText(4, 14, "Telecamera")
-            p.drawText(4, h // 2 + 14, "Registrazione (spostata come impostato)")
+            fm = p.fontMetrics()
+            for y, text in ((2, "Telecamera"), (h // 2 + 2, "Registrazione (spostata come impostato)")):
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(20, 24, 29, 215))
+                p.drawRoundedRect(QRectF(3, y, fm.horizontalAdvance(text) + 12, fm.height() + 4), 4, 4)
+                p.setPen(QColor("#B8C0CC"))
+                p.drawText(QRectF(9, y, fm.horizontalAdvance(text) + 6, fm.height() + 4), Qt.AlignVCenter | Qt.AlignLeft, text)
         if self.suggest:
             p.fillRect(QRectF(self._x(self.suggest[0]), 0, self._x(self.suggest[1]) - self._x(self.suggest[0]), h),
                        QColor(80, 200, 120, 30))

@@ -21,6 +21,9 @@ def main() -> int:
         except Exception:  # noqa: BLE001
             pass
     app = QApplication(sys.argv)
+    if "--selftest" in sys.argv[1:]:
+        from . import selftest
+        return selftest.run()
     from .ui.brand import app_icon
     app.setWindowIcon(app_icon())
     app.setApplicationName("ConfMerge")

@@ -1,7 +1,6 @@
 import shutil
 import subprocess
 import time
-from pathlib import Path
 
 import pytest
 from scipy.io import wavfile
@@ -29,7 +28,7 @@ def media(tmp_path_factory):
     return d
 
 
-def wait(app, cond, timeout=120):
+def wait(app, cond, timeout=180):
     t = time.time()
     while not cond():
         app.processEvents()
@@ -37,63 +36,128 @@ def wait(app, cond, timeout=120):
         assert time.time() - t < timeout, "timeout"
 
 
-def test_wizard_flow(media, tmp_path, monkeypatch):
-    from PySide6.QtWidgets import QApplication, QMessageBox
-    app = QApplication.instance() or QApplication([])
+@pytest.fixture
+def app_window(qt_app, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: QMessageBox.Ok)
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: (_ for _ in ()).throw(AssertionError(a)))
-    from confmerge.render.model import Anim
     from confmerge.settings import Settings
-    from confmerge.ui.graphics_page import new_element
     from confmerge.ui.main_window import MainWindow
     from confmerge.ui.state import AppState
-
+    from confmerge.ui.theme import theme
+    theme.reduce_motion = True
     st = AppState(Settings(tmp_path / "cfg"))
+    theme.apply(qt_app)
     w = MainWindow(st)
     w.show()
-    w.select.load_folder(media)
-    assert len(w.select.videos) == 2 and w.select.audio.name == "rec.wav"
-    w.go_next()
-    wait(app, lambda: w.stack.currentIndex() == 2)
+    yield qt_app, st, w
+    w.close()
+
+
+def test_first_launch_is_simple_with_starter_profile(app_window):
+    app, st, w = app_window
+    assert w.mode == "simple" and w.simple.step == 0
+    assert st.profile_name == "Conferenza (semplice)" and st.spec.graphics.title.enabled
+    assert st.spec.credit.enabled                                          # credito attivo di default
+
+
+def test_simple_flow_to_exported_video(app_window, media, tmp_path):
+    app, st, w = app_window
+    s = w.simple
+    s.start.use_folder(media)
+    wait(app, lambda: st.project is not None and s.step == 1)
     pr = st.project
     assert pr.offset_s == pytest.approx(1.5, abs=0.01)
-    assert st.cam is not None and st.proxy.exists()
-    # la revisione carica forma d'onda e suggerimento (non applicato)
-    assert w.review.wave.suggest is not None and pr.trim_start is None
+    assert not s.next.isEnabled() and "conferma" in s.hint.text()           # il taglio va confermato in modo esplicito
+    assert pr.trim_start is None
+    st.review.apply_suggestion()
+    assert pr.trim_confirmed and s.next.isEnabled()
+    # testi variabili del profilo
+    st.spec.variables.update({"titolo": "Convegno di prova", "relatore": "Mario Rossi", "ruolo": "Sindaco"})
+    s.go_next()
+    assert s.step == 2
+    s.export._choose("fast")                                                 # «Più veloce»
+    st.spec.graphics.title.duration = 1.5
+    st.spec.credit.duration = 2.0
+    st.spec.export.out_dir, st.spec.export.name = str(tmp_path / "out"), "prova"
+    st.spec.export.encoder = "libx264"
+    wait(app, lambda: st.export.est is not None)
+    assert "MB" in s.export.est_big.text()                                   # tempo E dimensione sempre visibili
+    s.go_next()                                                              # «Esporta il video»
+    wait(app, lambda: st.queue.items and st.queue.items[0].status in ("completato", "errore"), 400)
+    assert st.queue.items[0].status == "completato", st.queue.items[0].error
+    assert (tmp_path / "out" / "prova.mp4").stat().st_size > 10_000
+    wait(app, lambda: s.export.stack.currentIndex() == 2)                    # schermata «Il video è pronto!»
+    assert "pronto" in s.export.done_title.text()
+
+
+def test_switch_modes_without_losing_anything(app_window, media):
+    app, st, w = app_window
+    w.simple.start.use_folder(media)
+    wait(app, lambda: st.project is not None)
+    st.review.apply_suggestion()
+    st.spec.variables["titolo"] = "Titolo di prova"
+    st.spec.credit.duration = 4.0
+    proj, trim = st.project, (st.project.trim_start, st.project.trim_end)
+    w.set_mode("advanced", animate=False)
+    assert w.mode == "advanced" and st.project is proj and w.adv.current() == 1
+    assert (proj.trim_start, proj.trim_end) == trim and st.spec.variables["titolo"] == "Titolo di prova"
+    assert not w.adv.nav.buttons[2]._state == "locked"                       # fasi sbloccate col progetto
+    w.adv.goto(3, animate=False)
+    w.adv.graphics.tabs.setCurrentIndex(0)
+    w.set_mode("simple", animate=False)
+    assert w.mode == "simple" and st.spec.credit.duration == 4.0 and st.project is proj
+    assert w.simple.step == 1 and w.simple.check._fields["titolo"].text() == "Titolo di prova"
+
+
+def test_advanced_flow_layers_undo_and_export(app_window, media, tmp_path):
+    app, st, w = app_window
+    w.set_mode("advanced", animate=False)
+    adv = w.adv
+    adv.select.load_folder(media)
+    assert st.sources.ready
+    adv.start_analysis()
+    wait(app, lambda: st.project is not None and adv.current() == 1)
     w.review.apply_suggestion()
-    assert pr.trim_start is not None and pr.trim_end > pr.trim_start
-    w.go_next()
-    assert w.stack.currentIndex() == 3
-    # grafica: un overlay di testo, titolo, credito attivo di default
+    adv.goto(3, animate=False)
+    from confmerge.ui.graphics_page import new_element
     el = new_element("text")
-    el.text, el.anim_in = "Evento", Anim("fade", 0.4)
+    el.text = "Evento"
     st.spec.graphics.elements.append(el)
-    st.spec.graphics.title.enabled = True
-    st.spec.graphics.title.duration = 2.0
+    st.touch()
+    adv.graphics.ov_main.refresh()
+    adv.graphics.ov_main.list.setCurrentRow(0)
+    # occhio e lucchetto nel pannello livelli
+    row = adv.graphics.ov_main.list.itemWidget(adv.graphics.ov_main.list.item(0))
+    row.eye.setChecked(False)
+    assert el.visible is False
+    row.eye.setChecked(True)
+    # annulla / ripristina
+    n = len(st.spec.graphics.elements)
+    st._undo_timer.stop()
+    st._commit()
+    st.spec.graphics.elements.append(new_element("shape"))
+    st.touch()
+    st._undo_timer.stop()
+    st._commit()
+    assert len(st.spec.graphics.elements) == n + 1
+    assert st.undo() and len(st.spec.graphics.elements) == n
+    assert st.redo() and len(st.spec.graphics.elements) == n + 1
+    st.spec.graphics.elements.pop()
+    st.spec.graphics.title.enabled = False
     st.spec.credit.duration = 2.0
     st.spec.export.preset, st.spec.export.custom_height = "Personalizzato", 360
-    st.spec.export.out_dir = str(tmp_path / "out")
-    st.spec.export.name = "prova"
+    st.spec.export.out_dir, st.spec.export.name = str(tmp_path / "out2"), "avanzato"
     st.spec.export.encoder = "libx264"
-    st.touch()
-    w.graphics.canvas.grab()
-    # profilo
-    st.save_profile("Canale A")
-    assert "Canale A" in st.settings.list_profiles()
-    w.go_next()
-    assert w.stack.currentIndex() == 4
-    wait(app, lambda: w.export.est is not None)
-    assert w.export.est.size.exact
-    w.export.enqueue(True)
-    wait(app, lambda: st.queue.items and st.queue.items[0].status in ("completato", "errore"), 300)
+    adv.goto(6, animate=False)
+    wait(app, lambda: st.export.est is not None)
+    adv.export.enqueue(True)
+    wait(app, lambda: st.queue.items and st.queue.items[0].status in ("completato", "errore"), 400)
     assert st.queue.items[0].status == "completato", st.queue.items[0].error
-    out = tmp_path / "out" / "prova.mp4"
-    assert out.exists() and out.stat().st_size > 10_000
+    assert (tmp_path / "out2" / "avanzato.mp4").exists()
     # progetto salvato e ricaricato
     st.sync_spec_to_project()
-    pr.save(tmp_path / "p.confmerge")
+    st.project.save(tmp_path / "p.confmerge")
     from confmerge.project import Project
-    p2 = Project.load(tmp_path / "p.confmerge")
-    assert p2.spec["graphics"]["elements"][0]["text"] == "Evento"
-    w.close()
+    assert Project.load(tmp_path / "p.confmerge").spec["graphics"]["elements"][0]["text"] == "Evento"

@@ -8,16 +8,23 @@ Licenza MIT – © 2026 Martino Zanzi – https://github.com/martinozanzi/confme
 Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
 ## Uso
-Avvia `ConfMerge.exe` e segui le schermate: **Selezione → Analisi → Revisione → Grafica → Export**.
+Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia in alto a destra, senza perdere nulla):
 
-- **Selezione**: una cartella (trova video, audio più lungo, slide) oppure file singoli; drag & drop.
-- **Revisione**: player con anteprima WYSIWYG, forma d'onda con marker trascinabili, offset in ms,
-  «riascolta sincronia», fotogramma ±, ±1 s. Tasti: `Spazio`, `←/→`, `Maiusc+←/→`, `I`/`O` (inizio/fine
-  taglio), `N` (cambio slide). I tagli suggeriti non vengono mai applicati senza conferma.
-- **Grafica**: immagine (formato, ritaglio, zoom, Ken Burns, fade), overlay/logo/barra, titolo iniziale,
-  schermata finale, lower third, slide e PiP, credito, profili («Salva come profilo» sempre disponibile).
-- **Export**: preset YouTube 1080p/1440p/4K, Veloce (copia stream), Personalizzato; loudness −14 LUFS,
-  filtri voce, stima di tempo (benchmark su 10 s) e dimensione, anteprima 10 s, coda, miniatura 1280×720.
+**Semplice** (la scelta di partenza, in tre passi):
+1. **Cartella**: trascina la cartella della conferenza. Parte subito l'analisi, con messaggi in italiano semplice.
+2. **Controlla**: guarda il video; la sincronia è «Ottima / Buona / Da controllare» (con «Ascolta 10 secondi» e, se serve, «Correggi»);
+   conferma inizio e fine; scegli il profilo (titolo, logo, credito) e compila i testi (titolo, relatore, data).
+3. **Esporta**: scegli «Consigliata per YouTube», «Più veloce» o «Massima qualità», vedi tempo e dimensione, premi «Esporta il video».
+   Alla fine: «Apri la cartella», «Guarda il video», «Crea la miniatura», «Nuovo progetto».
+
+**Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Immagine, Grafica, Slide e PiP, Audio, Export e coda),
+anteprima sempre visibile, sezioni comprimibili con ricerca rapida, pannello livelli (occhio, lucchetto, trascinamento),
+mini-timeline, annulla/ripristina, coda di export, parametri tecnici in «Avanzate» (chiuse di default).
+
+Scorciatoie (elenco completo con F1): `Spazio`/`K` riproduci, `←/→` fotogramma, `Maiusc+←/→` 1 s, `J`/`L` 5 s, `I`/`O` inizio/fine,
+`N` cambio slide, `Ctrl+Z` / `Ctrl+Maiusc+Z` annulla/ripristina.
+
+Il tema è scuro, chiaro o «come il computer» (Impostazioni); «Riduci le animazioni» le disattiva.
 
 Impostazioni e profili: `%APPDATA%\ConfMerge`.
 

@@ -1,0 +1,74 @@
+name: Build Windows
+
+# Compila ConfMerge.exe su Windows a ogni push su main (e a richiesta) e pubblica i file come artefatti.
+# Con un tag «v*» (es. v0.2.0) crea anche una Release con i due pacchetti.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"      # include tkinter (serve allo splash screen)
+
+      # build.bat usa un .venv già presente: lo creiamo noi con la versione scelta sopra
+      - name: Ambiente virtuale
+        shell: cmd
+        run: python -m venv .venv
+
+      - name: Test rapidi (senza ffmpeg)
+        shell: cmd
+        run: |
+          call .venv\Scripts\activate.bat
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pytest
+          set QT_QPA_PLATFORM=offscreen
+          set PYTHONPATH=src
+          python -m pytest -q tests/test_sync.py tests/test_trim_detect.py tests/test_media_scan.py tests/test_estimator.py tests/test_settings_queue.py tests/test_state_model.py tests/test_text_renderer.py
+
+      - name: Build (onefile + onedir)
+        shell: cmd
+        run: build.bat
+
+      - name: Autotest dell'app impacchettata
+        shell: pwsh
+        run: |
+          foreach ($exe in @("dist\onefile\ConfMerge.exe", "dist\onedir\ConfMerge\ConfMerge.exe")) {
+            $p = Start-Process -FilePath $exe -ArgumentList "--selftest" -Wait -PassThru
+            Write-Host "$exe -> codice di uscita $($p.ExitCode)"
+            Get-Content "$env:LOCALAPPDATA\ConfMerge\selftest.txt"
+            if ($p.ExitCode -ne 0) { exit 1 }
+          }
+
+      - name: Impacchetta la versione a cartella
+        shell: pwsh
+        run: Compress-Archive -Path dist\onedir\ConfMerge -DestinationPath dist\ConfMerge-cartella.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ConfMerge-windows
+          path: |
+            dist/onefile/ConfMerge.exe
+            dist/onefile/THIRD-PARTY-NOTICES.txt
+            dist/onefile/LICENSE.txt
+            dist/ConfMerge-cartella.zip
+          if-no-files-found: error
+
+      - name: Release (solo con i tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/onefile/ConfMerge.exe
+            dist/onefile/THIRD-PARTY-NOTICES.txt
+            dist/ConfMerge-cartella.zip

@@ -120,6 +120,7 @@ class RenderSpec:
     slides: SlideSettings = field(default_factory=SlideSettings)
     credit: CreditSettings = field(default_factory=CreditSettings)
     export: ExportSettings = field(default_factory=ExportSettings)
+    variables: dict[str, str] = field(default_factory=dict)   # testi variabili del profilo (titolo, relatore, data…)
 
     def to_dict(self) -> dict:
         return to_dict(self)
