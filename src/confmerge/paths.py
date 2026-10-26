@@ -48,15 +48,21 @@ def cleanup_temp() -> None:
         _temp_dir = None
 
 
+def log_file() -> Path:
+    return data_dir() / "confmerge.log"
+
+
 def setup_logging(verbose: bool = False) -> Path:
-    log_file = data_dir() / "confmerge.log"
+    """Log su file con rotazione (1 MB x 3) in %LOCALAPPDATA%\\ConfMerge\\confmerge.log."""
+    from logging.handlers import RotatingFileHandler
+    h = RotatingFileHandler(log_file(), maxBytes=1_000_000, backupCount=3, encoding="utf-8")
     logging.basicConfig(
         level=logging.DEBUG if verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[logging.FileHandler(log_file, encoding="utf-8")],
+        handlers=[h],
         force=True,
     )
-    return log_file
+    return log_file()
 
 
 def cleanup_stale() -> None:

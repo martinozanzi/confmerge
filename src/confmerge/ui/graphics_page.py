@@ -206,7 +206,10 @@ class OverlayTab(QWidget):
     def __init__(self, state, page, which: str, parent=None):
         super().__init__(parent)
         self.state, self.page, self.which = state, page, which   # which: main | title | outro
-        lay = QHBoxLayout(self)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        self.split = QSplitter(Qt.Horizontal)       # in finestre strette diventa verticale (vedi resizeEvent)
+        lay.addWidget(self.split)
         left = QVBoxLayout()
         self.scene_box = Section("Scena", "g:scene")
         self.scene_form = self.scene_box.form()
@@ -216,7 +219,7 @@ class OverlayTab(QWidget):
         left.addWidget(self.list, 1)
         grid = QGridLayout()
         grid.setSpacing(8)
-        for n, (text, kind, ic) in enumerate((("Testo", "text", "type"), ("Logo / immagine", "image", "image-plus"),
+        for n, (text, kind, ic) in enumerate((("Testo", "text", "type"), ("Logo", "image", "image-plus"),
                                               ("Forma", "shape", "shapes"), ("Barra", "bar", "activity"))):
             b = SecondaryButton(text, ic, f"Aggiungi: {text.lower()}")
             b.clicked.connect(lambda _=False, k=kind: self.add(k))
@@ -235,14 +238,26 @@ class OverlayTab(QWidget):
         lw.setLayout(left)
         self.list.setMinimumHeight(120)
         lsa = scrolled(lw)
-        lsa.setMinimumWidth(270)
-        lsa.setMaximumWidth(360)
-        lay.addWidget(lsa)
+        lsa.setMinimumWidth(345)
+        self.lsa = lsa
+        self.split.addWidget(lsa)
         self.editor = ElementEditor()
         self.editor.changed.connect(self.on_edit)
-        lay.addWidget(self.editor, 1)
+        self.split.addWidget(self.editor)
+        self.split.setStretchFactor(0, 1)
+        self.split.setStretchFactor(1, 3)
+        self.split.setSizes([360, 600])
         state.profile_changed.connect(self.refresh)
         self.refresh()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        vertical = self.width() < 820
+        want = Qt.Vertical if vertical else Qt.Horizontal
+        if self.split.orientation() != want:
+            self.split.setOrientation(want)
+            self.lsa.setMaximumWidth(16777215 if vertical else 420)
+            self.lsa.setMaximumHeight(16777215)
 
     def elements(self) -> list[Element]:
         gr = self.state.spec.graphics
@@ -471,21 +486,24 @@ class SlidesTab(QWidget):
     def build(self, lay):
         sl = self.state.spec.slides
         cb = self.state.touch
-        top = QHBoxLayout()
-        top.addWidget(bind.check(sl, "enabled", "Usa slide / secondo video", cb))
-        for text, fn in (("Scegli PDF/immagini…", self.pick_files), ("Scegli secondo video…", self.pick_video),
-                         ("Sincronizza secondo video", self.sync_video)):
+        lay.addWidget(bind.check(sl, "enabled", "Usa slide / secondo video", cb))
+        for text, fn in (("Scegli PDF o immagini…", self.pick_files), ("Scegli un secondo video…", self.pick_video)):
             b = QPushButton(text)
             b.clicked.connect(fn)
-            top.addWidget(b)
-        top.addStretch(1)
-        lay.addLayout(top)
+            lay.addWidget(b)
+        b = QPushButton("Sincronizza il secondo video")
+        b.clicked.connect(self.sync_video)
+        lay.addWidget(b)
         self.src = QLabel()
         self.src.setWordWrap(True)
         lay.addWidget(self.src)
-        split = QHBoxLayout()
-        g = Section("Cambi slide (premi N nella Revisione mentre guardi il video)", "g:slide-changes")
+        split = QVBoxLayout()   # una sotto l'altra: affiancate non ci stanno nel pannello
+        g = Section("Cambi di slide", "g:slide-changes")
         gl = g.body_lay
+        hint = QLabel("Mentre guardi il video nella schermata «Controlla», premi N a ogni cambio slide.")
+        hint.setWordWrap(True)
+        hint.setProperty("role", "caption")
+        gl.addWidget(hint)
         self.ct = QTableWidget(0, 2)
         self.ct.setHorizontalHeaderLabels(["Tempo (s)", "Slide n."])
         self.ct.itemChanged.connect(self.changes_edited)
@@ -497,8 +515,11 @@ class SlidesTab(QWidget):
         b.clicked.connect(lambda: self.del_row(self.ct, sl.changes))
         gl.addWidget(b)
         split.addWidget(g)
-        g = Section("Layout nella timeline (da questo istante in poi)", "g:slide-layouts")
+        g = Section("Disposizione nel tempo", "g:slide-layouts")
         gl = g.body_lay
+        hint = QLabel("Ogni riga vale da quel secondo in poi.")
+        hint.setProperty("role", "caption")
+        gl.addWidget(hint)
         self.lt = QTableWidget(0, 2)
         self.lt.setHorizontalHeaderLabels(["Tempo (s)", "Layout"])
         self.lt.itemChanged.connect(self.layouts_edited)
@@ -506,6 +527,8 @@ class SlidesTab(QWidget):
         gl.addWidget(self.lt)
         row = QHBoxLayout()
         self.lay_combo = QComboBox()
+        self.lay_combo.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.lay_combo.setMinimumContentsLength(16)
         for k, v in LAYOUTS.items():
             self.lay_combo.addItem(v, k)
         row.addWidget(self.lay_combo, 1)

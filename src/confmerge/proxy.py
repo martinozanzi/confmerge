@@ -11,7 +11,9 @@ from .media_scan import MediaInfo
 from .pipeline import audio_filter, plan_segments
 from .project import Project
 
-PROXY_H = 480
+PROXY_H = 360              # più piccolo = anteprima più rapida da preparare
+WINDOW_S = 600.0           # anteprima iniziale: 10 minuti da quando inizia l'audio
+NEAR_S = 180.0             # finestra preparata quando si salta in un altro punto
 
 
 def proxy_size(clips: list[MediaInfo]) -> tuple[int, int]:
@@ -20,25 +22,50 @@ def proxy_size(clips: list[MediaInfo]) -> tuple[int, int]:
     return max(2, w), PROXY_H
 
 
-def build_proxy(p: Project, clips: list[MediaInfo], out: Path,
-                on_progress: Callable[[float, float | None], None] | None = None,
-                cancel: threading.Event | None = None) -> Path:
-    """Video intero (linea temporale completa) a bassa risoluzione, con l'audio esterno allineato (offset in uso)."""
+def audio_start(p: Project) -> float:
+    """Istante (sulla linea temporale dei video) in cui inizia l'audio registrato."""
+    return max(0.0, p.effective_offset)
+
+
+def initial_window(p: Project) -> tuple[float, float]:
+    a = min(audio_start(p), max(0.0, p.total_duration - 10))
+    return a, min(p.total_duration, a + WINDOW_S)
+
+
+def window_around(p: Project, t: float) -> tuple[float, float]:
+    a = max(0.0, min(t - 20.0, p.total_duration - NEAR_S))
+    return a, min(p.total_duration, a + NEAR_S)
+
+
+def build_window(p: Project, clips: list[MediaInfo], a: float, b: float, out: Path,
+                 on_progress: Callable[[float, float | None], None] | None = None,
+                 cancel: threading.Event | None = None) -> Path:
+    """Anteprima a bassa risoluzione dell'intervallo [a, b] della linea temporale, con l'audio registrato già allineato."""
+    segs = plan_segments(clips, a, b)
+    if not segs:
+        raise ValueError("Intervallo di anteprima vuoto")
     w, h = proxy_size(clips)
     args: list[str] = []
-    for c in clips:
-        args += ["-i", str(c.path)]
+    for s in segs:
+        args += ["-ss", f"{s.ss:.3f}", "-t", f"{s.length:.3f}", "-i", str(s.clip.path)]
     args += ["-i", p.audio]
-    n = len(clips)
+    n = len(segs)
     ch = [f"[{i}:v:0]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,"
           f"fps=25,setsar=1,format=yuv420p[v{i}]" for i in range(n)]
     ch.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]")
-    ch.append(f"[{n}:a:0]{audio_filter(p, 0.0)},atrim=end={p.total_duration:.3f},aformat=channel_layouts=stereo[a]")
+    ch.append(f"[{n}:a:0]{audio_filter(p, a)},atrim=end={b - a:.3f},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[a]")
     args += ["-filter_complex", ";".join(ch), "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "ultrafast",
-             "-crf", "28", "-pix_fmt", "yuv420p", "-g", "25", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart",
-             str(out)]
-    run_ffmpeg(args, p.total_duration, on_progress, cancel)
+             "-tune", "fastdecode", "-crf", "30", "-pix_fmt", "yuv420p", "-g", "25", "-c:a", "aac", "-b:a", "96k",
+             "-t", f"{b - a:.3f}", "-movflags", "+faststart", str(out)]
+    run_ffmpeg(args, b - a, on_progress, cancel)
     return out
+
+
+def build_proxy(p: Project, clips: list[MediaInfo], out: Path,
+                on_progress: Callable[[float, float | None], None] | None = None,
+                cancel: threading.Event | None = None) -> Path:
+    """Compatibilità: anteprima di tutta la linea temporale (lenta); di norma si usa build_window."""
+    return build_window(p, clips, 0.0, p.total_duration, out, on_progress, cancel)
 
 
 def sync_preview(p: Project, clips: list[MediaInfo], center: float, out: Path, span: float = 10.0) -> Path:
@@ -56,10 +83,12 @@ def sync_preview(p: Project, clips: list[MediaInfo], center: float, out: Path, s
     return out
 
 
-def rebuild_audio(p: Project, proxy_in: Path, out: Path, cancel: threading.Event | None = None) -> Path:
-    """Dopo un cambio di offset: rifà solo l'audio del proxy (il video viene copiato: operazione rapida)."""
+def rebuild_audio(p: Project, proxy_in: Path, out: Path, origin: float, length: float,
+                  cancel: threading.Event | None = None) -> Path:
+    """Dopo un cambio di offset: rifà solo l'audio dell'anteprima (il video viene copiato: operazione rapida)."""
     args = ["-i", str(proxy_in), "-i", p.audio, "-filter_complex",
-            f"[1:a:0]{audio_filter(p, 0.0)},atrim=end={p.total_duration:.3f},aformat=channel_layouts=stereo[a]",
-            "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(out)]
-    run_ffmpeg(args, p.total_duration, None, cancel)
+            f"[1:a:0]{audio_filter(p, origin)},atrim=end={length:.3f},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[a]",
+            "-map", "0:v", "-map", "[a]", "-c:v", "copy", "-c:a", "aac", "-b:a", "96k", "-t", f"{length:.3f}",
+            "-movflags", "+faststart", str(out)]
+    run_ffmpeg(args, length, None, cancel)
     return out

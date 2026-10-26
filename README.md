@@ -19,7 +19,9 @@ Avvia `ConfMerge.exe` e segui le schermate: **Selezione → Analisi → Revision
 - **Export**: preset YouTube 1080p/1440p/4K, Veloce (copia stream), Personalizzato; loudness −14 LUFS,
   filtri voce, stima di tempo (benchmark su 10 s) e dimensione, anteprima 10 s, coda, miniatura 1280×720.
 
-Impostazioni e profili: `%APPDATA%\ConfMerge`. Log: `%LOCALAPPDATA%\ConfMerge\confmerge.log`.
+Impostazioni e profili: `%APPDATA%\ConfMerge`.
+
+**Log degli errori**: `%LOCALAPPDATA%\ConfMerge\confmerge.log` (errori Python, avvisi di Qt, ffmpeg) e `crash.log` (arresti improvvisi). Da *Aiuto → Apri la cartella dei log* oppure *Copia informazioni per l'assistenza*.
 
 ## Build (Windows 10/11, serve solo Python 3.11–3.14)
 ```

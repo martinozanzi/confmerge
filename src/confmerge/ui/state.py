@@ -34,6 +34,7 @@ class AppState(QObject):
         self.ext: np.ndarray | None = None
         self.proxy: Path | None = None
         self.proxy_stale = False
+        self.proxy_range: tuple[float, float] = (0.0, 0.0)   # parte della linea temporale coperta dall'anteprima
         self.warnings: list[str] = []
         self.last_frame = None            # ultimo QImage del player (sfondo per l'editor grafico)
         self.queue = ExportQueue()
