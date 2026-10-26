@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QTextBrowser, QVBoxLayout
 
 from .. import REPO_URL, __author__, __version__
+from .brand import app_icon, logo_pixmap
 
 CREDITS = """
 <h3>Librerie incluse</h3>
@@ -26,7 +27,11 @@ class AboutDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Informazioni su ConfMerge")
         self.resize(520, 520)
+        self.setWindowIcon(app_icon())
         lay = QVBoxLayout(self)
+        logo = QLabel()
+        logo.setPixmap(logo_pixmap(64))
+        lay.addWidget(logo)
         lay.addWidget(QLabel(f"<h2>ConfMerge {__version__}</h2>"
                              "Prepara video di conferenze per YouTube.<br>"
                              f"Autore: <b>{__author__}</b><br>"

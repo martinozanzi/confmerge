@@ -11,12 +11,13 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QDoubleSpinBox, QFi
 
 from .. import paths, pipeline, proxy
 from ..ffmpeg_wrapper import FFmpegError
-from ..media_scan import (AUDIO_EXT, SLIDE_EXT, VIDEO_EXT, MediaInfo, find_gaps, media_info, order_clips,
+from ..media_scan import (_natural_key, AUDIO_EXT, SLIDE_EXT, VIDEO_EXT, MediaInfo, find_gaps, media_info, order_clips,
                           pick_external_audio, scan_folder)
 from ..sync import analyze_sync
 from ..worker import Worker
 from .player import PlayerWidget, fmt
 from .waveform import WaveformWidget
+from .widgets import Segmented
 
 AUDIO_FILTER = "Audio (*.mp3 *.wav *.ogg *.m4a *.flac)"
 VIDEO_FILTER = "Video (*.mp4 *.mov *.m4v)"
@@ -49,7 +50,15 @@ class SelectPage(QWidget):
             row.addWidget(bb)
         row.addStretch(1)
         lay.addLayout(row)
-        box = QGroupBox("Video (ordine di montaggio)")
+        orow = QHBoxLayout()
+        orow.addWidget(QLabel("Ordine di montaggio:"))
+        self.order_mode = "date"
+        self.order_seg = Segmented([("Per data di registrazione", "date"), ("Per nome file", "name"), ("Manuale", "manual")])
+        self.order_seg.changed.connect(self._order_changed)
+        orow.addWidget(self.order_seg)
+        orow.addStretch(1)
+        lay.addLayout(orow)
+        box = QGroupBox("Video: il PRIMO in alto è il primo del montaggio")
         bl = QHBoxLayout(box)
         self.list = QListWidget()
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -131,6 +140,8 @@ class SelectPage(QWidget):
         if 0 <= i < len(self.videos) and 0 <= j < len(self.videos):
             self.videos[i], self.videos[j] = self.videos[j], self.videos[i]
             self.infos[i], self.infos[j] = self.infos[j], self.infos[i]
+            self.order_mode = "manual"
+            self.order_seg.setValue("manual")
             self.refresh()
             self.list.setCurrentRow(j)
 
@@ -141,6 +152,29 @@ class SelectPage(QWidget):
             self.refresh(reorder=True)
 
     # --- riepilogo
+    def _order_changed(self, mode: str):
+        self.order_mode = mode
+        if mode != "manual":
+            self.refresh(reorder=True)
+
+    def _sorted(self, infos: list[MediaInfo]) -> tuple[list[MediaInfo], str]:
+        """Applica il criterio scelto; restituisce (clip, avviso sul criterio effettivo)."""
+        by_name = sorted(infos, key=lambda c: _natural_key(c.path))
+        by_date, how = order_clips(infos)
+        note = ""
+        if self.order_mode == "manual":
+            known = {c.path: c for c in infos}
+            kept = [known[v] for v in self.videos if v in known]
+            return kept + [c for c in by_name if c.path not in {k.path for k in kept}], note
+        if self.order_mode == "name":
+            return by_name, note
+        if how != "creation_time":
+            note = "Le date di registrazione mancano o sono uguali: ho usato l'ordine dei nomi."
+        elif [c.path for c in by_date] != [c.path for c in by_name]:
+            note = ("L'ordine per data è diverso da quello per nome file: controlla che il primo dell'elenco sia "
+                    "davvero l'inizio (puoi cambiare criterio qui sopra).")
+        return by_date, note
+
     def refresh(self, reorder: bool = False):
         warn: list[str] = []
         if reorder or len(self.infos) != len(self.videos):
@@ -150,12 +184,15 @@ class SelectPage(QWidget):
                     infos.append(media_info(v))
                 except FFmpegError as e:
                     warn.append(str(e))
-            self.infos, self.order_method = (order_clips(infos) if infos else ([], "nome"))
+            self.infos, note = self._sorted(infos) if infos else ([], "")
+            if note:
+                warn.append(note)
             self.videos = [c.path for c in self.infos]
         self.list.clear()
-        for c in self.infos:
-            self.list.addItem(f"{c.name} — {fmt(c.duration)} — {c.width}×{c.height} @ {c.fps:.0f} fps"
-                              + (f" (ruotato {c.rotation}°)" if c.rotation else ""))
+        for n, c in enumerate(self.infos, 1):
+            when = c.creation_time.astimezone().strftime("%d/%m/%Y %H:%M:%S") if c.creation_time else "data sconosciuta"
+            self.list.addItem(f"{n}.  {c.name}  —  registrato il {when}  —  durata {fmt(c.duration)}  —  "
+                              f"{c.width}×{c.height} @ {c.fps:.0f} fps" + (f" (ruotato {c.rotation}°)" if c.rotation else ""))
         warn += [g.message() for g in find_gaps(self.infos)]
         parts = [f"<b>{len(self.videos)}</b> video"]
         parts.append(f"audio esterno: <b>{self.audio.name}</b>" if self.audio else "<span style='color:#c33'>audio esterno mancante</span>")
@@ -163,7 +200,7 @@ class SelectPage(QWidget):
             parts.append(f"<b>{len(self.slides)}</b> file di slide")
         txt = "Riepilogo: " + " · ".join(parts)
         if self.infos:
-            txt += f"<br>Ordinati per {getattr(self, 'order_method', 'nome')}. Riordinali con ▲▼ se necessario."
+            txt += "<br>Il montaggio segue l'elenco dall'alto in basso. Cambia criterio o usa ▲▼ per riordinare."
         if warn:
             txt += "<br><span style='color:#d08000'>⚠ " + "<br>⚠ ".join(warn) + "</span>"
         self.summary.setText(txt)

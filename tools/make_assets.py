@@ -53,6 +53,31 @@ p.drawText(172, 156, "Video di conferenze pronti per YouTube")
 p.drawText(172, 228, "Caricamento…")
 p.end()
 s.save(str(out / "splash.png"))
-logo(256).save(str(out / "icon.ico"))
+
+
+def write_ico(path: Path, sizes=(16, 24, 32, 48, 64, 128, 256)) -> None:
+    """ICO con più dimensioni (PNG incorporati): Windows sceglie la più adatta (Esplora file, barra, Alt+Tab)."""
+    import struct
+    from PySide6.QtCore import QBuffer, QIODevice
+    blobs = []
+    for sz in sizes:
+        buf = QBuffer()
+        buf.open(QIODevice.WriteOnly)
+        logo(512).scaled(sz, sz, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).save(buf, "PNG")
+        blobs.append((sz, bytes(buf.data())))
+    head = struct.pack("<HHH", 0, 1, len(blobs))
+    offset = 6 + 16 * len(blobs)
+    entries, data = b"", b""
+    for sz, b in blobs:
+        entries += struct.pack("<BBBBHHII", 0 if sz >= 256 else sz, 0 if sz >= 256 else sz, 0, 0, 1, 32, len(b), offset)
+        offset += len(b)
+        data += b
+    path.write_bytes(head + entries + data)
+
+
+write_ico(out / "icon.ico")
 logo(256).save(str(out / "icon.png"))
-print("asset generati in", out)
+res = Path(__file__).resolve().parents[1] / "src" / "confmerge" / "resources" / "app"
+res.mkdir(parents=True, exist_ok=True)
+logo(256).save(str(res / "icon.png"))
+print("asset generati in", out, "e", res)

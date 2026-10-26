@@ -12,7 +12,15 @@ def main() -> int:
     from PySide6.QtWidgets import QApplication
     from .ui.main_window import MainWindow
 
+    if sys.platform == "win32":      # senza questo Windows raggruppa la finestra sotto l'icona di Python
+        try:
+            import ctypes
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MartinoZanzi.ConfMerge")
+        except Exception:  # noqa: BLE001
+            pass
     app = QApplication(sys.argv)
+    from .ui.brand import app_icon
+    app.setWindowIcon(app_icon())
     app.setApplicationName("ConfMerge")
     app.setApplicationVersion(__version__)
     app.aboutToQuit.connect(paths.cleanup_temp)
