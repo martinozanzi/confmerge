@@ -90,6 +90,8 @@ def pump(app, n=15, dt=0.03):
 
 
 def main():
+    import faulthandler
+    faulthandler.dump_traceback_later(240, exit=True)       # se qualcosa si blocca, si esce con la traccia invece di restare fermi
     args = sys.argv[1:]
     outdir = pathlib.Path(args[0])
     outdir.mkdir(parents=True, exist_ok=True)
@@ -207,9 +209,8 @@ def main():
     w.social.show_step(3, animate=False)
     pump(app, 10)
     snap("o3-esporta")
-    print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False))
-    w.close()
-    os._exit(0)
+    print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False), flush=True)
+    os._exit(0)          # senza chiudere la finestra: la chiusura dei lettori multimediali può bloccarsi in modo casuale
 
 
 if __name__ == "__main__":
