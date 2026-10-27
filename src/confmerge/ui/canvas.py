@@ -5,7 +5,7 @@ from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
-from .. import slides as sl
+from .. import slides as sl, subtitles
 from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
@@ -120,7 +120,17 @@ class Canvas(QWidget):
         p.end()
         if self.mode == "crop":
             return img
-        return compositor.render_frame(self._all_elements(), W, H, self.out_t, self._main_dur(), img)
+        out = compositor.render_frame(self._all_elements(), W, H, self.out_t, self._main_dur(), img)
+        return self._draw_subtitle(out, W, H)
+
+    def _draw_subtitle(self, img: QImage, W: int, H: int) -> QImage:
+        st = self.state.spec.subtitles
+        if not st.enabled or not st.lines:
+            return img
+        ln = subtitles.active_line(st, self.state.from_out(self.out_t))
+        if ln is None:
+            return img
+        return compositor.render_frame([subtitles.preview_element(st, ln.text, W, H)], W, H, 1.0, 1e9, img)
 
     def _main_dur(self) -> float:
         pr = self.state.project

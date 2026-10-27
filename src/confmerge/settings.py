@@ -32,6 +32,8 @@ class Settings:
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / "profiles").mkdir(exist_ok=True)
         self.file = self.root / "settings.json"
+        from .secrets_store import KeyStore
+        self.keys = KeyStore(self.root)
         self.data: dict = {"last_folder": "", "current_profile": "Predefinito", "estimator_corr": {}}
         if self.file.exists():
             try:

@@ -14,7 +14,7 @@ from ..project import Project
 from ..queue import ExportQueue
 from ..settings import Settings
 from ..spec import RenderSpec
-from .controllers import AnalysisRunner, ExportController, ReviewController, SourcesModel
+from .controllers import AnalysisRunner, ExportController, ReviewController, SourcesModel, SubtitleController
 
 UNDO_LIMIT = 100
 
@@ -60,6 +60,7 @@ class AppState(QObject):
         self.analysis = AnalysisRunner(self)
         self.review = ReviewController(self)
         self.export = ExportController(self)
+        self.subtitles = SubtitleController(self)
         # profilo e annulla/ripristina
         self.settings.ensure_starter_profile()
         self.profile_name = self.settings.data.get("current_profile", "Predefinito")

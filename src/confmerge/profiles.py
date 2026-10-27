@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 from .serde import from_dict, to_dict
-from .spec import AudioSettings, CreditSettings, ExportSettings, Graphics, ImageSettings, RenderSpec
+from .spec import (AudioSettings, CreditSettings, ExportSettings, Graphics, ImageSettings, RenderSpec,
+                   SubtitleSettings)
 
 
 def profile_from_spec(spec: RenderSpec, font: str = "Segoe UI") -> dict:
@@ -10,7 +11,9 @@ def profile_from_spec(spec: RenderSpec, font: str = "Segoe UI") -> dict:
         "graphics": to_dict(spec.graphics),
         "credit": to_dict(spec.credit),
         "export": {k: v for k, v in to_dict(spec.export).items() if k not in ("name",)},
-        "audio": to_dict(spec.audio),
+        "audio": {k: v for k, v in to_dict(spec.audio).items() if k not in ("music_path",)},
+        "subtitles": {k: v for k, v in to_dict(spec.subtitles).items()
+                      if k not in ("lines", "range_start", "range_end")},
         "image": to_dict(spec.image),
         "variables": dict(spec.variables),
         "font": font,
@@ -31,7 +34,13 @@ def apply_profile(spec: RenderSpec, profile: dict) -> None:
         if not spec.export.out_dir:
             spec.export.out_dir = out_dir
     if profile.get("audio"):
+        music = spec.audio.music_path
         spec.audio = from_dict(AudioSettings, profile["audio"])
+        spec.audio.music_path = music
+    if profile.get("subtitles"):
+        old = spec.subtitles
+        spec.subtitles = from_dict(SubtitleSettings, profile["subtitles"])
+        spec.subtitles.lines, spec.subtitles.range_start, spec.subtitles.range_end = old.lines, old.range_start, old.range_end
     if profile.get("image"):
         spec.image = from_dict(ImageSettings, profile["image"])
     if profile.get("variables") is not None:

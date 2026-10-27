@@ -50,6 +50,41 @@ class AudioSettings:
     highpass: bool = False
     denoise: bool = False
     compressor: bool = False
+    music_path: str = ""            # brano di sottofondo (vuoto = nessuna musica)
+    music_db: float = -12.0         # livello della musica rispetto al parlato, nelle pause
+    music_duck: bool = True         # abbassa la musica quando c'è voce
+    music_duck_db: float = -8.0     # di quanto si abbassa ancora mentre si parla
+    music_fade: float = 2.0         # dissolvenza in entrata e in uscita (s)
+
+
+@dataclass
+class SubLine:
+    start: float = 0.0            # secondi sulla linea del tempo del progetto (non del video di uscita)
+    end: float = 0.0
+    text: str = ""
+
+
+@dataclass
+class SubtitleSettings:
+    """Sottotitoli sul video: lo stile fa parte del profilo, le righe appartengono al lavoro corrente."""
+    enabled: bool = False
+    font: str = "Poppins"
+    bold: bool = True
+    size: float = 0.048            # frazione dell'altezza
+    color: str = "#FFFFFF"
+    outline: float = 0.0035        # spessore del bordo (frazione dell'altezza)
+    outline_color: str = "#000000"
+    shadow: bool = True
+    box: bool = False              # sfondo pieno dietro il testo
+    box_color: str = "#000000"
+    box_opacity: float = 0.65
+    position: str = "bottom"       # bottom | middle | top
+    margin: float = 0.085          # distanza dal bordo (frazione dell'altezza)
+    uppercase: bool = False
+    max_chars: int = 38            # lunghezza massima di una riga quando si creano i sottotitoli
+    range_start: float = 0.0       # intervallo trascritto (secondi del progetto)
+    range_end: float = 0.0
+    lines: list[SubLine] = field(default_factory=list)
 
 
 @dataclass
@@ -121,6 +156,7 @@ class Graphics:
 class RenderSpec:
     image: ImageSettings = field(default_factory=ImageSettings)
     audio: AudioSettings = field(default_factory=AudioSettings)
+    subtitles: SubtitleSettings = field(default_factory=SubtitleSettings)
     graphics: Graphics = field(default_factory=Graphics)
     slides: SlideSettings = field(default_factory=SlideSettings)
     credit: CreditSettings = field(default_factory=CreditSettings)

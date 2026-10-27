@@ -66,6 +66,24 @@ def run() -> int:
             out.append(r.stdout.splitlines()[0][:40])
         return "; ".join(out)
 
+    def ffmpeg_filters():
+        """Servono xfade (transizioni), ass (sottotitoli), sidechaincompress e amix (musica con abbassamento)."""
+        import subprocess
+
+        from .ffmpeg_wrapper import _CREATIONFLAGS, ffmpeg_path
+        r = subprocess.run([ffmpeg_path(), "-hide_banner", "-filters"], capture_output=True, text=True,
+                           creationflags=_CREATIONFLAGS)
+        have = {line.split()[1] for line in r.stdout.splitlines() if len(line.split()) > 1}
+        missing = [f for f in ("xfade", "ass", "sidechaincompress", "amix", "loudnorm") if f not in have]
+        assert not missing, "ffmpeg senza i filtri: " + ", ".join(missing)
+
+    def keystore():
+        from .secrets_store import KeyStore
+        d = Path(tempfile.mkdtemp())
+        ks = KeyStore(d)
+        ks.set("groq", "gsk_prova")
+        assert KeyStore(d).get("groq") == "gsk_prova", "la chiave salvata non si rilegge"
+
     def notices():
         root = paths.app_root()
         found = [n for n in ("THIRD-PARTY-NOTICES.txt", "LICENSE") if (root / n).exists() or (Path.cwd() / n).exists()]
@@ -92,6 +110,8 @@ def run() -> int:
     check("logo e icona", brand)
     check("moduli Qt (SVG, PDF, multimedia)", qt_modules)
     check("ffmpeg e ffprobe", ffmpeg)
+    check("filtri ffmpeg (transizioni, sottotitoli, musica)", ffmpeg_filters)
+    check("salvataggio sicuro delle chiavi", keystore)
     check("licenze e crediti", notices)
     check("finestra in modalità Semplice e Avanzata", windows)
     text = "\n".join(lines) + f"\n\n{'TUTTO OK' if not failed else str(failed) + ' controlli falliti'}\n"

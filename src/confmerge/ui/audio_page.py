@@ -4,6 +4,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from . import bind
+from .music_card import MusicCard
 from .widgets import Card, label
 
 HELP = {
@@ -43,6 +44,8 @@ class AudioPage(QWidget):
             card.add(t)
             card.add(label(HELP[attr], "caption", True))
         lay.addWidget(card)
+        self.music = MusicCard(state, detailed=True)
+        lay.addWidget(self.music)
         self.result = Card()
         self.result.add(label("Volume del video finito", "h2", True))
         self.result_txt = label("Dopo l'export qui vedrai com'era il volume prima e com'è diventato.", "muted", True)

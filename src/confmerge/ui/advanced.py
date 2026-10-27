@@ -27,7 +27,7 @@ class _WidthWatcher(QObject):
 
 
 PHASES = [("folder-open", "Sorgenti"), ("audio-waveform", "Sincronia e tagli"), ("crop", "Formato"),
-          ("type", "Titoli e transizioni"), ("layers", "Logo e grafica"), ("presentation", "Slide e PiP"),
+          ("type", "Titoli e sottotitoli"), ("layers", "Logo e grafica"), ("presentation", "Slide e PiP"),
           ("volume-2", "Audio"), ("download", "Export e coda")]
 DECORATIONS = 4
 
@@ -63,9 +63,9 @@ class AdvancedShell(QWidget):
         self.stack.addWidget(self.review)
         self.image = GraphicsPage(state, self.review, ("image",), "Formato",
                                   "Formato, ritaglio, zoom e dissolvenze. L'anteprima mostra il risultato.")
-        self.titles = GraphicsPage(state, self.review, ("title", "lt", "caption", "outro", "trans", "credit"),
-                                   "Titoli e transizioni",
-                                   "Scegli un modello pronto, scrivi i testi e decidi come cambiano le scene.")
+        self.titles = GraphicsPage(state, self.review, ("title", "lt", "caption", "subs", "outro", "trans", "credit"),
+                                   "Titoli e sottotitoli",
+                                   "Scegli un modello pronto, scrivi i testi, aggiungi i sottotitoli e decidi come cambiano le scene.")
         self.graphics = GraphicsPage(state, self.review, ("overlay",), "Logo e grafica",
                                      "Logo, scritte, forme e barra di avanzamento sopra il video: i livelli si trascinano.")
         self.titles.goPhase.connect(lambda _k: self.goto(DECORATIONS))
@@ -73,9 +73,9 @@ class AdvancedShell(QWidget):
                                    "Slide a schermo intero o in piccolo accanto al relatore.")
         self.audio = AudioPage(state)
         self.export = ExportPage(state, self.review)
-        for w in (self.image, self.titles, self.graphics, self.slides, self.audio):
-            self.stack.addWidget(w)
         from .graphics_page import scrolled
+        for w in (self.image, self.titles, self.graphics, self.slides, scrolled(self.audio)):
+            self.stack.addWidget(w)
         sa = scrolled(self.export)
         self._export_filter = _WidthWatcher(sa.viewport(), self.export.set_available_width)
         self.stack.addWidget(sa)

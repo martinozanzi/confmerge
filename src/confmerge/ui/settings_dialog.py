@@ -1,9 +1,10 @@
 """Impostazioni (aspetto, animazioni, profili, credito) e elenco delle scorciatoie."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QTextBrowser, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QTextBrowser, QVBoxLayout, QWidget
 
-from .graphics_page import CreditTab, ProfileBar
+from .api_keys import ApiKeysCard
+from .graphics_page import CreditTab, ProfileBar, scrolled
 from .theme import theme
 from .widgets import Card, Segmented, Toggle, label
 
@@ -21,8 +22,11 @@ class SettingsDialog(QDialog):
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Impostazioni")
-        self.resize(720, 560)
-        lay = QVBoxLayout(self)
+        self.resize(760, 700)
+        outer = QVBoxLayout(self)
+        body = QWidget()
+        lay = QVBoxLayout(body)
+        lay.setContentsMargins(0, 0, 8, 0)
         c = Card()
         c.add(label("Aspetto", "h2"))
         self.theme_seg = Segmented([("Scuro", "dark"), ("Chiaro", "light"), ("Come il computer", "system")])
@@ -45,11 +49,13 @@ class SettingsDialog(QDialog):
                      "caption", True))
         c2.add(ProfileBar(state))
         lay.addWidget(c2)
+        lay.addWidget(ApiKeysCard(state))
         lay.addWidget(CreditTab(state))
+        outer.addWidget(scrolled(body))
         bb = QDialogButtonBox(QDialogButtonBox.Close)
         bb.rejected.connect(self.reject)
         bb.button(QDialogButtonBox.Close).setText("Chiudi")
-        lay.addWidget(bb)
+        outer.addWidget(bb)
 
 
 class ShortcutsDialog(QDialog):

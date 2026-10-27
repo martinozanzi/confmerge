@@ -21,6 +21,8 @@ from .review_page import PreviewBinder, SyncPanel, TrimPanel
 from .theme import S1, S2, S3, S4, pixmap, theme
 from .thumbnail_dialog import ThumbnailDialog
 from .waveform import WaveformWidget
+from .music_card import MusicCard
+from .subtitles_tab import SimpleSubtitlesCard
 from .template_gallery import VariablesForm
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, ProgressRing, SecondaryButton,
                       StepIndicator, Toggle, label)
@@ -492,6 +494,9 @@ class SimpleExport(QWidget):
             row.addWidget(qc)
             self.q_cards[key] = qc
         lay.addLayout(row)
+        self.subs_card = SimpleSubtitlesCard(self.state, self._open_settings)
+        lay.addWidget(self.subs_card)
+        lay.addWidget(MusicCard(self.state))
         opts = Card()
         self.loud = Toggle("Volume uniforme per YouTube")
         self.loud.setChecked(self.state.spec.audio.loudnorm)
@@ -528,6 +533,13 @@ class SimpleExport(QWidget):
         wl.setContentsMargins(0, 0, 0, 0)
         wl.addWidget(sa)
         return w
+
+    def _open_settings(self):
+        w = self.window()
+        if hasattr(w, "settings_dialog"):
+            w.settings_dialog()
+            for c in (self.subs_card,):
+                c.refresh()
 
     def _pick_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Dove salvare il video", self.dir_edit.text())
