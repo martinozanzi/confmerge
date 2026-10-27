@@ -1,6 +1,8 @@
 """Fase «Export e coda» (modalità Avanzata): vista su ExportController."""
 from __future__ import annotations
 
+import os
+
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
@@ -373,14 +375,15 @@ class ExportPage(QWidget):
         self.bar.setValue(1.0 if results and all(it.status == DONE for it, _ in results) else self.bar.value())
         failed = [it for it, _ in results if it.status == FAILED]
         lines = []
+        quiet = bool(os.environ.get("CONFMERGE_NO_CONFIRM"))      # nei test niente finestre modali che bloccano
         for it, rep in [r for r in results if r[0].status == DONE][-3:]:
             if rep:
                 lines.append(f"{it.name}: {fmt_dur(rep.wall_s)}, {rep.size_bytes / 1e6:.0f} MB")
                 lines += ["  • " + n for n in rep.notes]
-        if failed:
+        if failed and not quiet:
             QMessageBox.critical(self, "Non è riuscito", "\n".join(f"{i.name}: {i.error}" for i in failed)
                                  + "\n\nIl dettaglio è nel file di log (menu Aiuto).")
-        elif lines:
+        elif lines and not quiet:
             est = self.ctl.est
             QMessageBox.information(self, "Fatto!", "\n".join(lines) + (f"\n\nPrevisione: {est.time_text}, {est.size_text}" if est else ""))
         self.prog_lbl.setText("Completato." if lines else "")
