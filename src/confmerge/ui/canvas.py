@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QWidget
 
 from .. import slides as sl, subtitles
 from ..brand import brand_elements
+from . import placement
 from ..render import anchors
 from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
@@ -25,6 +26,8 @@ class Canvas(QWidget):
     elementMoved = Signal(int, float, float)
     elementPicked = Signal(int)
     cropChanged = Signal(float, float, float, float)
+    itemSelected = Signal(str, int)        # Studio Social: tipo («el», «logo», «sub») e indice dell'elemento scelto; ('', -1) = nessuno
+    itemsChanged = Signal()                # un elemento è stato spostato (a fine trascinamento)
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
@@ -37,6 +40,9 @@ class Canvas(QWidget):
         self.scene_target = "main"
         self.elements_override: list[Element] | None = None
         self.fixed_size: tuple[int, int] | None = None   # es. miniatura 1280×720
+        self.social_edit = False                         # Studio Social: testi, loghi e sottotitoli si trascinano con aggancio
+        self.sel_item: tuple[str, int] | None = None
+        self._item_drag: tuple[str, int, QPointF, float, float] | None = None
         self.safe_zones: list[dict] = []                 # Studio Social: [{name, color, safe=(sopra, sotto, sinistra, destra)}]
         self.safe_common = (0.0, 0.0, 0.0, 0.0)          # area sicura per tutte le piattaforme mostrate
         self.out_t = 0.0                 # tempo di uscita
@@ -294,6 +300,14 @@ class Canvas(QWidget):
             p.setPen(QPen(QColor("#4aa3ff"), 1, Qt.DashLine))
             p.setBrush(Qt.NoBrush)
             p.drawRect(QRectF(tr.x() + b.x() * s, tr.y() + b.y() * s, b.width() * s, b.height() * s))
+        if self.social_edit and self.sel_item and self.mode == "video":
+            W, H = self.frame_size()
+            for kind, i, r in placement.items(self.state, W, H):
+                if (kind, i) == self.sel_item:
+                    sc = tr.width() / W
+                    p.setPen(QPen(QColor("#4aa3ff"), 2, Qt.DashLine))
+                    p.setBrush(Qt.NoBrush)
+                    p.drawRect(QRectF(tr.x() + r.x() * sc, tr.y() + r.y() * sc, r.width() * sc, r.height() * sc))
         if self._guides and self.show_guides:
             p.setPen(QPen(QColor("#ff4fa3"), 1))
             for axis, v in self._guides:
@@ -322,6 +336,19 @@ class Canvas(QWidget):
             return
         W, H = self.frame_size()
         f = self._to_frame(pos)
+        if self.social_edit and self.mode == "video":
+            found = placement.hit(placement.items(self.state, W, H), f.x() * W, f.y() * H)
+            if found:
+                kind, i, r = found
+                self.sel_item = (kind, i)
+                self._item_drag = (kind, i, QPointF(r.center().x() / W - f.x(), r.center().y() / H - f.y()),
+                                   r.width() / W, r.height() / H)
+                self.itemSelected.emit(kind, i)
+            else:
+                self.sel_item = None
+                self.itemSelected.emit("", -1)
+            self.update()
+            return
         els = self._edit_elements()
         for i in range(len(els) - 1, -1, -1):
             if not els[i].visible or els[i].locked:
@@ -342,6 +369,19 @@ class Canvas(QWidget):
         pos = e.position()
         if self.mode == "crop" and self._crop_drag is not None:
             self._crop_rect = QRectF(self._crop_drag, pos).normalized()
+            self.update()
+            return
+        if self._item_drag is not None:
+            kind, i, off, w, h = self._item_drag
+            W, H = self.frame_size()
+            f = self._to_frame(pos)
+            cx, cy = f.x() + off.x(), f.y() + off.y()
+            self._guides = []
+            if not (e.modifiers() & Qt.AltModifier):
+                cx, cy, self._guides = placement.snap(cx, cy, w / 2, h / 2, W, H, self.state.spec.brand.safe)
+            if kind == "sub":
+                cx = 0.5                                     # i sottotitoli restano al centro: si sposta solo l'altezza
+            placement.place(self.state, kind, i, min(max(cx, 0.0), 1.0), min(max(cy, 0.0), 1.0), w, h, W, H)
             self.update()
             return
         if self._drag_idx >= 0:
@@ -379,6 +419,10 @@ class Canvas(QWidget):
             self._crop_rect = None
             self._crop_drag = None
             self.update()
+        moved = self._item_drag is not None
+        self._item_drag = None
         self._drag_idx = -1
         self._guides = []
         self.update()
+        if moved:
+            self.itemsChanged.emit()

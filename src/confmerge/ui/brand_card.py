@@ -55,7 +55,7 @@ class BrandCard(Card):
             t.toggled.connect(lambda on, l=lg: (setattr(l, "enabled", on), st.touch()))
             self.logos_box.lay.addWidget(t)
             cb = QComboBox()
-            for k, v in CORNERS.items():
+            for k, v in {**CORNERS, "free": "Libero (trascinato)"}.items():
                 cb.addItem(v, k)
             cb.setCurrentIndex(max(0, cb.findData(lg.corner)))
             cb.currentIndexChanged.connect(lambda _, l=lg, c=cb: (setattr(l, "corner", c.currentData()), st.touch()))

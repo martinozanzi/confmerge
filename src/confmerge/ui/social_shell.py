@@ -317,6 +317,21 @@ class SocialLook(QWidget):
         self.prev_box.currentIndexChanged.connect(self._preview_changed)
         row.addWidget(self.prev_box, 1)
         ll.addLayout(row)
+        # elementi sull'anteprima: si trascinano; qui i pulsanti per centrarli
+        self.player.canvas.social_edit = True
+        self.player.canvas.itemSelected.connect(self._item_selected)
+        self.player.canvas.itemsChanged.connect(self._items_changed)
+        pr = QHBoxLayout()
+        self.sel_lbl = label("Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).", "caption", True)
+        pr.addWidget(self.sel_lbl, 1)
+        self.c_h = SecondaryButton("Centra in orizzontale")
+        self.c_v = SecondaryButton("Centra in verticale")
+        self.c_h.clicked.connect(lambda: self._center(True, False))
+        self.c_v.clicked.connect(lambda: self._center(False, True))
+        for b in (self.c_h, self.c_v):
+            b.setEnabled(False)
+            pr.addWidget(b)
+        ll.addLayout(pr)
         split.addWidget(left)
         panel = QWidget()
         pl = QVBoxLayout(panel)
@@ -377,6 +392,28 @@ class SocialLook(QWidget):
         state.profile_changed.connect(self.sync)
         state.social.finished.connect(self._loaded)
         self.sync()
+
+    def _item_selected(self, kind: str, idx: int):
+        from . import placement
+        on = bool(kind)
+        self.c_h.setEnabled(on and kind != "sub")           # i sottotitoli sono già centrati in orizzontale
+        self.c_v.setEnabled(on)
+        self.sel_lbl.setText(placement.label_of(self.state, kind, idx) if on
+                             else "Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).")
+
+    def _items_changed(self):
+        self.state.touch()
+        self.state.profile_changed.emit()                   # le schede mostrano «Libero» e la nuova posizione
+
+    def _center(self, h: bool, v: bool):
+        from . import placement
+        cv = self.player.canvas
+        if not cv.sel_item:
+            return
+        W, H = cv.frame_size()
+        placement.center(self.state, *cv.sel_item, W, H, h, v)
+        cv.update()
+        self._items_changed()
 
     def selected(self) -> list[PF.Platform]:
         ids = self.state.spec.social.platforms
