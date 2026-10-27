@@ -25,14 +25,12 @@ class BrandCard(Card):
         self.logos_box = Card(flat=True, padding=0)
         self.add(self.logos_box)
         if scenes:
-            r2 = QHBoxLayout()
-            self.t_btn = SecondaryButton("Titolo del marchio", "type", "Titolo iniziale con colori e logo del marchio")
-            self.o_btn = SecondaryButton("Finale del marchio", "film", "Schermata finale con logo, slogan e @canale")
+            self.t_btn = SecondaryButton("Titolo con il marchio", "type", "Titolo iniziale con colori e logo del marchio")
+            self.o_btn = SecondaryButton("Finale con il marchio", "film", "Schermata finale con logo, slogan e @canale")
             self.t_btn.clicked.connect(lambda: self._scene("title"))
             self.o_btn.clicked.connect(lambda: self._scene("outro"))
-            r2.addWidget(self.t_btn)
-            r2.addWidget(self.o_btn)
-            self.lay.addLayout(r2)
+            self.add(self.t_btn)                       # uno sotto l'altro: nei pannelli stretti non allargano la scheda
+            self.add(self.o_btn)
         self.sync()
         state.profile_changed.connect(self.sync)
 

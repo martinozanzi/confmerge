@@ -29,7 +29,7 @@ class BrandDialog(QDialog):
         self.state, self.store = state, state.kits
         self.kit: BrandKit | None = None
         self.setWindowTitle("Kit del marchio")
-        self.resize(980, 680)
+        self.resize(1120, 700)
         lay = QVBoxLayout(self)
         lay.addWidget(label("Kit del marchio", "h2"))
         lay.addWidget(label("Un marchio per ogni associazione, partito o candidato: colori, caratteri, slogan e loghi. "
@@ -51,7 +51,7 @@ class BrandDialog(QDialog):
             b.clicked.connect(fn)
             grid.addWidget(b, n // 2, n % 2)
         ll.addLayout(grid)
-        left.setMinimumWidth(260)
+        left.setMinimumWidth(340)
         split.addWidget(left)
         self.editor = QWidget()
         self.ed_lay = QVBoxLayout(self.editor)
@@ -133,10 +133,11 @@ class BrandDialog(QDialog):
     def _build_editor(self):
         while self.ed_lay.count():
             it = self.ed_lay.takeAt(0)
-            if it.widget():
-                it.widget().hide()
-                it.widget().setParent(None)           # via subito: niente schede vecchie che restano sovrapposte
-                it.widget().deleteLater()
+            w = it.widget()
+            if w:
+                w.hide()
+                w.setParent(None)                     # via subito: niente schede vecchie che restano sovrapposte
+                w.deleteLater()
         kit = self.kit
         self.use_btn.setEnabled(kit is not None)
         if kit is None:
