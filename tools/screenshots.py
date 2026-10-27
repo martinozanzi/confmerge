@@ -19,7 +19,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from PySide6.QtWidgets import (QAbstractButton, QAbstractScrollArea, QApplication, QLabel, QScrollBar, QSplitter,
+from PySide6.QtWidgets import (QAbstractButton, QAbstractScrollArea, QApplication, QLabel, QListWidget, QScrollBar, QSplitter,
                                QStackedWidget, QTabBar, QWidget)
 
 
@@ -50,13 +50,17 @@ def find_problems(root: QWidget, tag: str) -> list[dict]:
             continue
         name = f"{type(w).__name__}:{w.objectName() or (w.text()[:20] if hasattr(w, 'text') and callable(w.text) else '')}"
         # scorrimento orizzontale = contenuto più largo dello spazio disponibile (cose tagliate)
-        if isinstance(w, QAbstractScrollArea) and w.horizontalScrollBar().isVisible() and w.horizontalScrollBar().maximum() > 0:
+        if isinstance(w, QListWidget) and w.flow() == QListWidget.LeftToRight and not w.isWrapping():
+            pass          # striscia di miniature: scorre di proposito
+        elif isinstance(w, QAbstractScrollArea) and w.horizontalScrollBar().isVisible() and w.horizontalScrollBar().maximum() > 0:
             inner = w.widget() if hasattr(w, "widget") else None
             out.append({"tag": tag, "kind": "scorrimento-orizzontale", "widget": name,
                         "eccesso": w.horizontalScrollBar().maximum(),
                         "contenuto": type(inner).__name__ if inner else "", "visibile": w.viewport().width(),
                         "minimo-contenuto": inner.minimumSizeHint().width() if inner else 0})
         # testo tagliato
+        if isinstance(w, QLabel) and w.hasScaledContents():
+            continue      # immagine che si adatta al riquadro: non si taglia
         if isinstance(w, (QLabel, QAbstractButton)) and w.width() > 0:
             hint = w.minimumSizeHint()
             if isinstance(w, QLabel) and w.wordWrap():
@@ -209,6 +213,43 @@ def main():
     w.social.show_step(3, animate=False)
     pump(app, 10)
     snap("o3-esporta")
+
+    # ---------------- MARCHIO E MINIATURE
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from confmerge import brand
+    from confmerge.ui.brand_dialog import BrandDialog
+    from confmerge.ui.thumbnail_dialog import ThumbnailDialog
+    k = sst.kits.new("Associazione Prova")
+    k.slogan, k.social = "Insieme per la città", "@associazioneprova"
+    sst.kits.save(k)
+    for name, col, w_, h_ in (("Logo", "#FFFFFF", 400, 160), ("Simbolo", "#EF4444", 300, 300)):
+        im = QImage(w_, h_, QImage.Format_ARGB32)
+        im.fill(QColor(0, 0, 0, 0))
+        q = QPainter(im)
+        q.setBrush(QColor(col))
+        q.setPen(QColor(0, 0, 0, 0))
+        q.drawEllipse(8, 8, w_ - 16, h_ - 16)
+        q.end()
+        f = media / f"{name}.png"
+        im.save(str(f))
+        sst.kits.add_logo(k, f, name, "main" if name == "Logo" else "symbol")
+    brand.apply_kit(sst.spec, sst.kits.get(k.id), sst.kits)
+    sst.touch()
+    w.social.show_step(2, animate=False)
+    w.social.look.sync()
+    pump(app, 20)
+    snap("o2-aspetto-marchio")
+
+    def snap_dialog(dlg, name):
+        dlg.show()
+        pump(app, 40)
+        dlg.grab().save(str(outdir / f"{name}.png"))
+        problems.extend(find_problems(dlg, name))
+        shots.append(name)
+        dlg.close()
+
+    snap_dialog(BrandDialog(sst, w), "b0-marchio")
+    snap_dialog(ThumbnailDialog(sst, outdir, "x", lambda: 2.0, w), "m0-miniatura")
     print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False), flush=True)
     os._exit(0)          # senza chiudere la finestra: la chiusura dei lettori multimediali può bloccarsi in modo casuale
 

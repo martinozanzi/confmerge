@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLineEdit, Q
 from .. import platforms as PF
 from ..media_scan import VIDEO_EXT
 from .cut_waveform import CutWaveform, fmt_clock
+from .brand_card import BrandCard
 from .graphics_page import scrolled
 from .music_card import MusicCard
 from .player import PlayerWidget
@@ -350,6 +351,7 @@ class SocialLook(QWidget):
         sc = Card()
         sc.add(self.safe)
         pl.addWidget(sc)
+        pl.addWidget(BrandCard(state))
         pl.addWidget(SimpleSubtitlesCard(state, open_settings))
         pl.addWidget(MusicCard(state))
         pl.addStretch(1)
@@ -419,7 +421,9 @@ class SocialLook(QWidget):
         st.spec.image.aspect = p.aspect                 # l'anteprima mostra il formato scelto
         st.spec.export.preset, st.spec.export.custom_height = "Personalizzato", p.short
         same_aspect = [q for q in self.selected() if q.aspect == p.aspect]
-        self.player.canvas.safe_zone = PF.common_safe(same_aspect) if st.spec.social.show_safe else (0.0, 0.0, 0.0, 0.0)
+        safe = PF.common_safe(same_aspect)
+        self.player.canvas.safe_zone = safe if st.spec.social.show_safe else (0.0, 0.0, 0.0, 0.0)
+        st.spec.brand.safe = list(safe)                  # i loghi stanno sempre dentro la zona non coperta dall'app
         self.player.canvas.update()
         # inquadratura: serve solo se il video non ha già il formato scelto
         ref = st.clips[0] if st.clips else None
@@ -469,9 +473,10 @@ def _ratio(aspect: str) -> float:
 class SocialExport(QWidget):
     newProject = Signal()
 
-    def __init__(self, state, parent=None):
+    def __init__(self, state, pos_fn=None, parent=None):
         super().__init__(parent)
         self.state = state
+        self.pos_fn = pos_fn or (lambda: state.trim_start)
         self.ctl = state.export
         self.root = state.settings.root
         lay = QVBoxLayout(self)
@@ -500,7 +505,13 @@ class SocialExport(QWidget):
         self.go = PrimaryButton("Esporta i video", "download")
         self.go.setMinimumHeight(48)
         self.go.clicked.connect(self.start)
-        lay.addWidget(self.go, 0, Qt.AlignLeft)
+        gr = QHBoxLayout()
+        gr.addWidget(self.go)
+        self.thumb_btn = SecondaryButton("Miniatura YouTube…", "image", "Crea la miniatura con titolo, colori e loghi del marchio")
+        self.thumb_btn.clicked.connect(self._thumb)
+        gr.addWidget(self.thumb_btn)
+        gr.addStretch(1)
+        lay.addLayout(gr)
         self.run_card = Card()
         self.run_lay = self.run_card.lay
         self.run_card.setVisible(False)
@@ -564,6 +575,12 @@ class SocialExport(QWidget):
                 self.list_card.add(label(warn, "warn", True))
         self.go.setText(f"Esporta {len(sel)} " + ("video" if len(sel) == 1 else "video"))
         self.go.setEnabled(bool(sel))
+
+    def _thumb(self):
+        from .thumbnail_dialog import ThumbnailDialog
+        if self.state.project:
+            ThumbnailDialog(self.state, Path(self.dir_edit.text() or "."), self.name_edit.text() or "video", self.pos_fn,
+                            self).exec()
 
     def _pick_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Cartella di destinazione", self.dir_edit.text())
@@ -652,7 +669,7 @@ class SocialShell(QWidget):
         self.start = SocialStart(state)
         self.cut = SocialCut(state)
         self.look = SocialLook(state, open_settings)
-        self.export = SocialExport(state)
+        self.export = SocialExport(state, self.cut.player.position)
         for w in (self.start, self.cut, self.look, self.export):
             self.stack.addWidget(w)
         lay.addWidget(self.stack, 1)

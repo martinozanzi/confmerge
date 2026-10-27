@@ -110,6 +110,8 @@ class AppState(QObject):
         self.last_frame = None            # ultimo QImage del player (sfondo per l'editor grafico)
         self.queue = ExportQueue()
         self.sample_cache: dict = {}
+        from ..brand_kit import KitStore
+        self.kits = KitStore(self.settings.root)      # kit del marchio (uguali per i due strumenti)
         # controller condivisi dalle due modalità
         self.sources = SourcesModel()
         self.analysis = AnalysisRunner(self)

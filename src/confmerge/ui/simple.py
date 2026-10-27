@@ -21,6 +21,7 @@ from .review_page import PreviewBinder, SyncPanel, TrimPanel
 from .theme import S1, S2, S3, S4, pixmap, theme
 from .thumbnail_dialog import ThumbnailDialog
 from .waveform import WaveformWidget
+from .brand_card import BrandCard
 from .music_card import MusicCard
 from .subtitles_tab import SimpleSubtitlesCard
 from .template_gallery import VariablesForm
@@ -283,6 +284,8 @@ class SimpleCheck(QWidget):
             c.add(b)
         self.trans_lbl = label("", "caption", True)
         c.add(self.trans_lbl)
+        self.brand_card = BrandCard(self.state, scenes=True)
+        c.add(self.brand_card)
         self.fields_box = QWidget()
         self.fields_lay = QVBoxLayout(self.fields_box)
         self.fields_lay.setContentsMargins(0, 0, 0, 0)

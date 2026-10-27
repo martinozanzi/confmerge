@@ -156,6 +156,27 @@ class Graphics:
 
 
 @dataclass
+class LogoPlacement:
+    """Un logo del kit del marchio sul video: dove sta, quanto è grande, se si vede."""
+    path: str = ""
+    role: str = "main"            # main | symbol | …
+    name: str = ""
+    corner: str = "tr"            # tl | tr | bl | br
+    size: float = 0.11            # larghezza, frazione della larghezza del video
+    opacity: float = 1.0
+    enabled: bool = True
+
+
+@dataclass
+class BrandSettings:
+    """Marchio applicato al lavoro (copiato dal kit: il video si ricostruisce anche senza l'archivio)."""
+    kit_id: str = ""
+    name: str = ""
+    logos: list[LogoPlacement] = field(default_factory=list)
+    safe: list[float] = field(default_factory=list)      # sopra, sotto, sinistra, destra: margini della piattaforma (Studio Social)
+
+
+@dataclass
 class SocialSettings:
     """Studio Social: dove pubblicare e come mostrare le zone di sicurezza (non finiscono mai nel file)."""
     platforms: list[str] = field(default_factory=lambda: ["shorts"])
@@ -171,6 +192,7 @@ class RenderSpec:
     audio: AudioSettings = field(default_factory=AudioSettings)
     subtitles: SubtitleSettings = field(default_factory=SubtitleSettings)
     social: SocialSettings = field(default_factory=SocialSettings)
+    brand: BrandSettings = field(default_factory=BrandSettings)
     graphics: Graphics = field(default_factory=Graphics)
     slides: SlideSettings = field(default_factory=SlideSettings)
     credit: CreditSettings = field(default_factory=CreditSettings)

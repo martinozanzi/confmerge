@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
+from .brand import brand_elements
 from . import audio_fx, credit, edl, encoders, paths, slides as sl, subtitles, transitions
 from .ffmpeg_wrapper import FFmpegError
 from .media_scan import MediaInfo
@@ -204,9 +205,10 @@ def kenburns_filter(spec: RenderSpec, W: int, H: int, t0: float) -> str:
             f"crop={W}:{H}:x='max(0,min(iw-{W},{cx}*iw-{W}/2))':y='max(0,min(ih-{H},{cy}*ih-{H}/2))'")
 
 
-def _graphics_elements(spec: RenderSpec, D: float) -> list[Element]:
+def _graphics_elements(spec: RenderSpec, D: float, W: int = 1920, H: int = 1080) -> list[Element]:
     gr = spec.graphics
     els = substitute([e for e in gr.elements if "main" in e.targets], spec.variables)
+    els += brand_elements(spec, W, H)                       # loghi del kit del marchio
     for i, lt in enumerate(gr.lower_thirds):
         els += lower_third_elements(lt, i, spec.variables)
     if gr.title.enabled and gr.title.over_video:
@@ -270,7 +272,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         cur = _add_slides(g, cur, sls, slide_images or [], W, H, fps, D, workdir, t0, p)
 
     # --- 3. grafica sul video principale
-    els = _graphics_elements(spec, D)
+    els = _graphics_elements(spec, D, W, H)
     layers = compositor.plan_layers(els, W, H, D, fps, workdir, "m")
     frames += sum(l.frames for l in layers)
     cur = add_layers(g, cur, layers)
