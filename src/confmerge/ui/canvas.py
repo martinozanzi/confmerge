@@ -6,6 +6,7 @@ from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, 
 from PySide6.QtWidgets import QWidget
 
 from .. import slides as sl, subtitles
+from ..brand import brand_elements
 from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
@@ -74,6 +75,8 @@ class Canvas(QWidget):
         gr = self.state.spec.graphics
         vs = self.state.spec.variables
         els = substitute([e for e in gr.elements if "main" in e.targets], vs)
+        W, H = self.frame_size()
+        els += brand_elements(self.state.spec, W, H)
         for i, lt in enumerate(gr.lower_thirds):
             els += lower_third_elements(lt, i, vs)
         return els

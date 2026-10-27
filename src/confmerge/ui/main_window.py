@@ -14,6 +14,7 @@ from .. import paths
 from ..project import Project
 from .about import AboutDialog
 from .advanced import AdvancedShell
+from .brand_dialog import BrandDialog
 from .history_dialog import HistoryDialog
 from .home import HomePage
 from .social_shell import SocialShell
@@ -282,6 +283,10 @@ class MainWindow(QMainWindow):
         a = QAction(theme.icon("settings", theme.t.text2), "&Aspetto, profili e credito…", self)
         self._menu_icons.append((a, "settings"))
         a.triggered.connect(self.settings_dialog)
+        s.addAction(a)
+        a = QAction(theme.icon("palette", theme.t.text2), "&Kit del marchio…", self)
+        self._menu_icons.append((a, "palette"))
+        a.triggered.connect(lambda: BrandDialog(self.active_state, self).exec())
         s.addAction(a)
         h = mb.addMenu("&Aiuto")
         for text, icon, fn in (("&Scorciatoie da tastiera", "keyboard", lambda: ShortcutsDialog(self).exec()),

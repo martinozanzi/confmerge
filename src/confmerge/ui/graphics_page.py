@@ -217,6 +217,9 @@ class OverlayTab(QWidget):
         self.state, self.page, self.which = state, page, which   # which: main | title | outro
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
+        if which == "main":
+            from .brand_card import BrandCard
+            lay.addWidget(BrandCard(state, scenes=True))
         self.split = QSplitter(Qt.Horizontal)       # in finestre strette diventa verticale (vedi resizeEvent)
         lay.addWidget(self.split)
         left = QVBoxLayout()

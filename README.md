@@ -33,6 +33,17 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
    I sottotitoli sono spostati sopra la zona coperta dall'app e la voce è portata a un livello adatto ai social.
 
+**Kit del marchio** (menu Impostazioni → Kit del marchio, oppure la scheda «Marchio» nei lavori): se ne possono avere quanti si
+vuole, uno per associazione, partito o candidato. Ognuno ha colori (principale, secondario, evidenza, testo, sfondo), caratteri,
+slogan, @canale e **loghi** (principale, **simbolo del partito**, quadrato, orizzontale…; i file sono copiati nel kit, quindi
+funzionano anche se li sposti). Sceglierne uno mette i loghi negli angoli del video (si accendono e spostano uno per uno e
+restano dentro le zone di sicurezza), dà ai sottotitoli e ai nomi dei relatori i colori del marchio e permette di creare con un
+clic un titolo e una schermata finale del marchio. I kit si esportano e importano come file `.zip`.
+
+**Miniature YouTube** (pulsante «Miniatura YouTube…» in Esporta): 8 layout pronti (titolo sull'immagine, immagine e titolo a lato,
+titolo evidenziato, fascia in diagonale, evento, citazione, dato in evidenza, solo titolo) con un fotogramma del video a scelta,
+i colori e i loghi del marchio e l'anteprima piccola come appare su YouTube. Si salva JPG (sotto i 2 MB) e PNG 1280×720.
+
 Le misure delle piattaforme (formato, durata massima, zone di sicurezza) sono approssimative e cambiano: si possono correggere
 con un file `piattaforme.json` nella cartella delle impostazioni, per esempio
 `{"tiktok": {"max_s": 600, "safe": [0.12, 0.25, 0.04, 0.14]}}` (margini sopra, sotto, sinistra, destra).

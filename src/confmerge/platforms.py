@@ -79,6 +79,7 @@ def variant_spec(base: RenderSpec, p: Platform) -> RenderSpec:
     s = RenderSpec.from_dict(base.to_dict())
     s.image.aspect = p.aspect
     s.image.kenburns = False
+    s.brand.safe = list(p.safe)                     # i loghi restano dentro la zona non coperta dall'app
     s.export.preset, s.export.custom_height = "Personalizzato", p.short
     top, bottom = p.safe[0], p.safe[1]
     sub = s.subtitles
