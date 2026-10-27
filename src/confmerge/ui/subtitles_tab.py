@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QMessageBox,
+from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QHeaderView, QMessageBox,
                                QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .. import subtitles as S
@@ -75,16 +75,21 @@ class SubtitlesTab(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setMinimumHeight(220)
+        self.table.setMinimumWidth(0)
+        self.table.horizontalHeader().setMinimumSectionSize(60)
         self.table.itemChanged.connect(self._edited)
         self.table.currentCellChanged.connect(lambda r, *_: self._goto(r))
         self.text_box.body_lay.addWidget(self.table)
-        btns = QHBoxLayout()
-        for text, ic, fn in (("Elimina la riga", "trash-2", self.delete_row), ("Esporta file .srt…", "save", self.export_srt),
-                             ("Cancella tutto", "x", self.clear_all)):
+        btns = QGridLayout()                       # due colonne: nei pannelli stretti i pulsanti non allargano la scheda
+        btns.setHorizontalSpacing(8)
+        btns.setVerticalSpacing(8)
+        for n, (text, ic, fn) in enumerate((("Elimina la riga", "trash-2", self.delete_row),
+                                            ("Esporta .srt…", "save", self.export_srt),
+                                            ("Cancella tutto", "x", self.clear_all))):
             b = SecondaryButton(text, ic)
             b.clicked.connect(fn)
-            btns.addWidget(b)
-        btns.addStretch(1)
+            btns.addWidget(b, n // 2, n % 2)
+        btns.setColumnStretch(2, 1)
         self.text_box.body_lay.addLayout(btns)
         lay.addWidget(self.text_box)
         lay.addStretch(1)
@@ -142,16 +147,16 @@ class SubtitlesTab(QWidget):
         f.addRow("Grandezza (%)", bind.spin(sub, "size", 2, 14, 0.2, 1, "", 100, cb))
         f.addRow("Colore del testo", bind.color(sub, "color", cb))
         f.addRow("Posizione", bind.combo(sub, "position", [(v, k) for k, v in S.POSITIONS.items()], cb))
-        f.addRow("Distanza dal bordo (%)", bind.spin(sub, "margin", 0, 40, 0.5, 1, "", 100, cb))
+        f.addRow("Distanza bordo (%)", bind.spin(sub, "margin", 0, 40, 0.5, 1, "", 100, cb))
         f.addRow(bind.check(sub, "bold", "Grassetto", cb))
         f.addRow(bind.check(sub, "uppercase", "Tutto maiuscolo", cb))
         f.addRow(bind.check(sub, "shadow", "Ombra", cb))
         f.addRow("Bordo (%)", bind.spin(sub, "outline", 0, 2, 0.05, 2, "", 100, cb))
         f.addRow("Colore del bordo", bind.color(sub, "outline_color", cb))
-        f.addRow(bind.check(sub, "box", "Sfondo pieno dietro il testo", cb))
+        f.addRow(bind.check(sub, "box", "Sfondo dietro il testo", cb))
         f.addRow("Colore dello sfondo", bind.color(sub, "box_color", cb))
-        f.addRow("Trasparenza dello sfondo (%)", bind.spin(sub, "box_opacity", 0, 100, 5, 0, "", 100, cb))
-        f.addRow("Lunghezza massima riga", bind.ispin(sub, "max_chars", 20, 80, lambda: None))
+        f.addRow("Opacità sfondo (%)", bind.spin(sub, "box_opacity", 0, 100, 5, 0, "", 100, cb))
+        f.addRow("Caratteri per riga", bind.ispin(sub, "max_chars", 20, 80, lambda: None))
         f.addRow(label("La lunghezza vale solo quando crei i sottotitoli.", "caption", True))
 
     def _style_changed(self):
