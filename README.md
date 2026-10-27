@@ -34,6 +34,8 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    per tutte quelle scelte. Loghi, testi e sottotitoli restano dentro la zona non coperta (nell'export di ogni piattaforma).
    I **sottotitoli** hanno grandezza, posizione e distanza dal bordo regolabili e, finché non li crei, nell'anteprima vedi una frase
    di esempio con lo stile scelto. **Testi e immagini sul video** si aggiungono con un clic e si ancorano a un angolo o a un lato.
+   Testi, logo e sottotitoli si **trascinano direttamente sull'anteprima**: si agganciano al centro, ai terzi e ai bordi della zona
+   sicura (tieni premuto Alt per muoverli liberamente); i pulsanti **Centra in orizzontale / in verticale** li mettono al centro.
    Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
    I sottotitoli sono spostati sopra la zona coperta dall'app e la voce è portata a un livello adatto ai social.

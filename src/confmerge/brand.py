@@ -47,8 +47,11 @@ def brand_elements(spec: RenderSpec, W: int, H: int) -> list[Element]:
             continue
         w = lg.size * W
         h = w * ih / iw
-        x = (m + left * W + w / 2) if lg.corner in ("tl", "bl") else (W - m - right * W - w / 2)
-        y = (m + top * H + h / 2) if lg.corner in ("tl", "tr") else (H - m - bottom * H - h / 2)
+        if lg.corner == "free":
+            x, y = lg.x * W, lg.y * H                            # messo a mano trascinandolo
+        else:
+            x = (m + left * W + w / 2) if lg.corner in ("tl", "bl") else (W - m - right * W - w / 2)
+            y = (m + top * H + h / 2) if lg.corner in ("tl", "tr") else (H - m - bottom * H - h / 2)
         out.append(Element(id=f"__logo{i}", kind="image", path=lg.path, width=lg.size, x=x / W, y=y / H, opacity=lg.opacity))
     return out
 

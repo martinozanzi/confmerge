@@ -47,6 +47,15 @@ class OverlaysCard(Card):
     def elements(self) -> list[Element]:
         return [e for e in self.state.spec.graphics.elements if "main" in e.targets and e.kind in ("text", "image")]
 
+    def _set_anchor(self, el, anchor: str) -> None:
+        """Passando a «Libero» l'elemento resta dove si vede (non salta alla posizione scritta nel modello)."""
+        if not anchor and el.anchor:
+            from ..render import anchors
+            from dataclasses import replace
+            r = anchors.resolve([replace(el)], 1920, 1080, self.state.spec.brand.safe)[0]
+            el.x, el.y = r.x, r.y
+        el.anchor = anchor
+
     def sync(self):
         while self.rows.count():
             it = self.rows.takeAt(0)
@@ -79,7 +88,7 @@ class OverlaysCard(Card):
         for k, v in ANCHORS.items():
             anchor.addItem(v, k)
         anchor.setCurrentIndex(max(0, anchor.findData(e.anchor)))
-        anchor.currentIndexChanged.connect(lambda _, el=e, c=anchor: (setattr(el, "anchor", c.currentData()), st.touch()))
+        anchor.currentIndexChanged.connect(lambda _, el=e, c=anchor: (self._set_anchor(el, c.currentData()), st.touch()))
         row.addWidget(anchor, 1)
         row.addWidget(label("Grandezza", "caption"))
         sl = QSlider(Qt.Horizontal)

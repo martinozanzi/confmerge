@@ -161,7 +161,9 @@ class LogoPlacement:
     path: str = ""
     role: str = "main"            # main | symbol | …
     name: str = ""
-    corner: str = "tr"            # tl | tr | bl | br
+    corner: str = "tr"            # tl | tr | bl | br | free (trascinato: vale x, y)
+    x: float = 0.5                # centro, frazione della larghezza (solo con corner = free)
+    y: float = 0.5
     size: float = 0.11            # larghezza, frazione della larghezza del video
     opacity: float = 1.0
     enabled: bool = True
