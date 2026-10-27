@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QLineEdit, QFrame, QScrollArea, QAbstractItemView, QGridLayout, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
                                QGroupBox, QHBoxLayout, QInputDialog, QLabel, QListWidget, QMessageBox, QPushButton,
                                QSlider, QSplitter, QTableWidget, QTableWidgetItem, QTabWidget, QVBoxLayout, QWidget)
@@ -15,10 +15,11 @@ from ..spec import ASPECTS, LAYOUTS, RES_SHORT, LayoutSpan, SlideChange, output_
 from . import bind
 from .layer_list import LayerList
 from .mini_timeline import MiniTimeline
-from .widgets import GhostButton, IconButton, PrimaryButton, SecondaryButton, Section, Toggle, label
+from .widgets import Badge, GhostButton, IconButton, PrimaryButton, SecondaryButton, Section, Toggle, label
 from .canvas import Canvas
 from .element_editor import ElementEditor
 from .player import fmt
+from .titles_tabs import TemplateTab, TransitionsTab
 
 
 def scrolled(w: QWidget) -> QScrollArea:
@@ -40,7 +41,7 @@ def new_element(kind: str, font: str = "Segoe UI") -> Element:
         el.fill = Fill(color="#E94F37")
     elif kind == "bar":
         el.kind, el.thickness, el.radius = "bar", 0.008, 0.004
-        el.fill = Fill("gradient", "#00C2FF", "#7B2FF7")
+        el.fill = Fill("gradient", "#2F80ED", "#22D3EE")
         el.x = el.y = 0.5
     elif kind == "image":
         el.width = 0.12
@@ -460,6 +461,7 @@ class LowerThirdTab(QWidget):
         last = self.lts()[-1] if self.lts() else None
         s = start if isinstance(start, float) else ((last.start + last.duration + 5) if last else 10.0)
         self.lts().append(LowerThird(name="Nome Cognome", role="Ruolo", start=round(s, 1),
+                                     style=last.style if last else "bar",
                                      font=self.state.settings.data.get("font", "Segoe UI")))
         self.refresh()
         self.state.touch()
@@ -498,6 +500,26 @@ class SlidesTab(QWidget):
         self.src = QLabel()
         self.src.setWordWrap(True)
         lay.addWidget(self.src)
+        self.sync_badge = Badge("", "info")
+        self.sync_badge.setVisible(False)
+        lay.addWidget(self.sync_badge, 0, Qt.AlignLeft)
+        nudge = QHBoxLayout()
+        nudge.addWidget(QLabel("Ritocco a mano (s):"))
+        self.off_spin = QDoubleSpinBox()
+        self.off_spin.setRange(-120.0, 120.0)
+        self.off_spin.setDecimals(2)
+        self.off_spin.setSingleStep(0.1)
+        self.off_spin.setToolTip("Se nello schermo condiviso qualcosa arriva troppo presto o troppo tardi rispetto al "
+                                 "relatore, sposta il secondo video di qualche decimo di secondo.")
+        self.off_spin.valueChanged.connect(self._off_changed)
+        nudge.addWidget(self.off_spin)
+        for txt, d in (("−0,1", -0.1), ("+0,1", 0.1)):
+            nb = QPushButton(txt)
+            nb.setToolTip("Sposta il secondo video di un decimo di secondo")
+            nb.clicked.connect(lambda _=False, dd=d: self.off_spin.setValue(self.off_spin.value() + dd))
+            nudge.addWidget(nb)
+        nudge.addStretch(1)
+        lay.addLayout(nudge)
         split = QVBoxLayout()   # una sotto l'altra: affiancate non ci stanno nel pannello
         g = Section("Cambi di slide", "g:slide-changes")
         gl = g.body_lay
@@ -558,6 +580,10 @@ class SlidesTab(QWidget):
 
     def refresh_tables(self):
         sl = self.state.spec.slides
+        if hasattr(self, "off_spin") and abs(self.off_spin.value() - sl.video_offset) > 1e-6:
+            self.off_spin.blockSignals(True)
+            self.off_spin.setValue(sl.video_offset)
+            self.off_spin.blockSignals(False)
         self.src.setText("Sorgente: " + (", ".join(Path(f).name for f in sl.files) if sl.files else
                                          (f"video {Path(sl.video).name} (offset {sl.video_offset * 1000:+.0f} ms)" if sl.video else "nessuna")))
         for t, rows in ((self.ct, [(f"{c.t:g}", str(c.index + 1)) for c in sl.changes]),
@@ -588,6 +614,13 @@ class SlidesTab(QWidget):
             self.refresh_tables()
             self.state.touch()
 
+    def _off_changed(self, v: float):
+        sl = self.state.spec.slides
+        if abs(sl.video_offset - v) > 1e-6:
+            sl.video_offset = v
+            self.refresh_tables()
+            self.state.touch()
+
     def sync_video(self):
         """Sincronizza il secondo video con lo stesso metodo (GCC-PHAT) usato per l'audio esterno."""
         st, sl = self.state, self.state.spec.slides
@@ -603,10 +636,11 @@ class SlidesTab(QWidget):
             QMessageBox.warning(self, "ConfMerge", f"Sincronizzazione non riuscita: {e}")
             return
         sl.video_offset = res.offset_s
-        msg = f"Offset del secondo video: {res.offset_s * 1000:+.0f} ms (confidenza {res.confidence:.1f})"
-        if res.low_confidence:
-            msg += "\n⚠ Confidenza bassa: il secondo video potrebbe non avere audio utile."
-        QMessageBox.information(self, "ConfMerge", msg)
+        from .controllers import sync_quality
+        word, kind, why = sync_quality(res.confidence)
+        self.sync_badge.set(f"Sincronia: {word}", kind)
+        self.sync_badge.setVisible(True)
+        self.sync_badge.setToolTip(why)
         self.refresh_tables()
         st.touch()
 
@@ -707,11 +741,13 @@ def apply_search(root: QWidget, query: str) -> int:
     return shown
 
 
-TAB_TITLES = {"image": "Immagine", "overlay": "Elementi", "title": "Titolo", "outro": "Finale", "lt": "Lower third",
-              "slides": "Slide e PiP", "credit": "Credito"}
+TAB_TITLES = {"image": "Formato", "overlay": "Elementi", "title": "Titolo iniziale", "outro": "Schermata finale",
+              "lt": "Nome relatore", "caption": "Scritte", "trans": "Transizioni", "slides": "Slide e PiP", "credit": "Credito"}
 
 
 class GraphicsPage(QWidget):
+    goPhase = Signal(str)          # "decorations": apre la fase «Logo e decorazioni»
+
     """Spazio di lavoro con l'anteprima sempre visibile a sinistra e le impostazioni a destra.
     `kinds` sceglie le schede: la stessa classe serve per Immagine, Grafica e Slide e PiP."""
 
@@ -762,7 +798,7 @@ class GraphicsPage(QWidget):
         ll.addLayout(trow)
         self.mini = MiniTimeline(state)
         self.mini.timeSelected.connect(self._mini_time)
-        self.mini.setVisible("overlay" in self.kinds)
+        self.mini.setVisible("overlay" in self.kinds or "title" in self.kinds)
         ll.addWidget(self.mini)
         self.tip = label("Trascina gli elementi sull'anteprima (guide e aggancio al centro e ai margini).", "caption", True)
         ll.addWidget(self.tip)
@@ -771,7 +807,7 @@ class GraphicsPage(QWidget):
         self.tabs.tabBar().setUsesScrollButtons(False)
         self.tabs.tabBar().setExpanding(False)
         self.tabs.tabBar().setElideMode(Qt.ElideNone)
-        self.image_tab = self.ov_main = self.ov_title = self.ov_outro = None
+        self.image_tab = self.ov_main = self.ov_title = self.ov_outro = self.lt_tab = None
         for k in self.kinds:
             if k == "image":
                 self.image_tab = ImageTab(state, self)
@@ -781,12 +817,19 @@ class GraphicsPage(QWidget):
                 self.tabs.addTab(self.ov_main, TAB_TITLES[k])
             elif k == "title":
                 self.ov_title = OverlayTab(state, self, "title")
-                self.tabs.addTab(self.ov_title, TAB_TITLES[k])
+                self.tabs.addTab(scrolled(TemplateTab(state, self, "title", self.ov_title)), TAB_TITLES[k])
             elif k == "outro":
                 self.ov_outro = OverlayTab(state, self, "outro")
-                self.tabs.addTab(self.ov_outro, TAB_TITLES[k])
+                self.tabs.addTab(scrolled(TemplateTab(state, self, "outro", self.ov_outro)), TAB_TITLES[k])
             elif k == "lt":
-                self.tabs.addTab(scrolled(LowerThirdTab(state, self)), TAB_TITLES[k])
+                self.lt_tab = LowerThirdTab(state, self)
+                self.tabs.addTab(scrolled(TemplateTab(state, self, "lower_third", self.lt_tab)), TAB_TITLES[k])
+            elif k == "caption":
+                tt = TemplateTab(state, self, "caption")
+                tt.goDecorations.connect(lambda: self.goPhase.emit("decorations"))
+                self.tabs.addTab(scrolled(tt), TAB_TITLES[k])
+            elif k == "trans":
+                self.tabs.addTab(scrolled(TransitionsTab(state, self)), TAB_TITLES[k])
             elif k == "slides":
                 self.tabs.addTab(scrolled(SlidesTab(state, self)), TAB_TITLES[k])
             elif k == "credit":
@@ -830,6 +873,7 @@ class GraphicsPage(QWidget):
 
     def _tab(self, i: int):
         w = self.tabs.widget(i)
+        w = self._inner(w)
         c = self.canvas
         c.mode = "video"
         c.scene = None
@@ -850,6 +894,26 @@ class GraphicsPage(QWidget):
         c.update()
         self._search(self.search.text())
 
+    def _inner(self, w):
+        """Cerca l'editor dentro la scheda (le schede sono avvolte in un'area con scroll)."""
+        if isinstance(w, QScrollArea):
+            w = w.widget()
+        return getattr(w, "inner", None) or w
+
+    def after_template(self, kind: str):
+        """Dopo la scelta di un modello: ridisegna e mostra un momento in cui il testo è visibile."""
+        self._tab(self.tabs.currentIndex())
+        if kind in ("title", "outro"):
+            sc = self.state.spec.graphics.title if kind == "title" else self.state.spec.graphics.outro
+            self.tslider.setValue(int(min(0.6, 1.8 / max(sc.duration, 1.0)) * 1000))
+        elif kind == "lower_third" and self.state.spec.graphics.lower_thirds:
+            self.seek_out(self.state.spec.graphics.lower_thirds[0].start + 1.5)
+        elif kind == "caption":
+            self.seek_out(3.5)
+
+    def seek_out(self, t: float):
+        self.tslider.setValue(int(min(1.0, t / max(self._max_t, 1e-6)) * 1000))
+
     def _range(self):
         c = self.canvas
         if c.mode == "scene" and c.scene:
@@ -857,10 +921,11 @@ class GraphicsPage(QWidget):
         else:
             self._max_t = max(1.0, self.state.trim_end - self.state.trim_start) if self.state.project else 30.0
         self.mini.set_scene(c.scene if c.mode == "scene" else None, self._max_t)
+        start = int(min(0.6, 1.8 / max(self._max_t, 1.0)) * 1000) if c.mode == "scene" else 0   # testi già visibili
         self.tslider.blockSignals(True)
-        self.tslider.setValue(0)
+        self.tslider.setValue(start)
         self.tslider.blockSignals(False)
-        self._tchanged(0)
+        self._tchanged(start)
 
     def _tchanged(self, v: int):
         t = v / 1000 * getattr(self, "_max_t", 10.0)
@@ -872,6 +937,6 @@ class GraphicsPage(QWidget):
         self.tslider.setValue(int(t / max(self._max_t, 1e-6) * 1000))
 
     def _picked(self, i: int):
-        w = self.tabs.currentWidget()
+        w = self._inner(self.tabs.currentWidget())
         if isinstance(w, OverlayTab) and i >= 0:
             w.list.setCurrentRow(i)

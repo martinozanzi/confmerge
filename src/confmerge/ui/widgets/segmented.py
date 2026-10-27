@@ -98,7 +98,7 @@ class Segmented(QWidget):
         hx = starts[lo] + (starts[hi] - starts[lo]) * frac
         hw = widths[lo] + (widths[hi] - widths[lo]) * frac
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(t.accent))
+        p.setBrush(QColor(t.btn1))
         p.drawRoundedRect(QRectF(hx, 4, hw, self.height() - 8), RADIUS_CTRL - 2, RADIUS_CTRL - 2)
         for i, ((text, _), ic, x0, w) in enumerate(zip(self.options, self.icons, starts, widths)):
             sel = abs(i - self._x) < 0.5

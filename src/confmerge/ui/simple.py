@@ -21,6 +21,7 @@ from .review_page import PreviewBinder, SyncPanel, TrimPanel
 from .theme import S1, S2, S3, S4, pixmap, theme
 from .thumbnail_dialog import ThumbnailDialog
 from .waveform import WaveformWidget
+from .template_gallery import VariablesForm
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, ProgressRing, SecondaryButton,
                       StepIndicator, Toggle, label)
 from .widgets.anim import fade_in, stagger_cards
@@ -270,6 +271,16 @@ class SimpleCheck(QWidget):
             col.addWidget(label(cap, "caption"))
             pv.addLayout(col)
         c.lay.addLayout(pv)
+        self.btn_title = SecondaryButton("Scegli lo stile del titolo…", "type", "Titoli pronti, in stile YouTube e Instagram")
+        self.btn_title.clicked.connect(lambda: self._pick_style("title"))
+        self.btn_outro = SecondaryButton("Scegli la schermata finale…", "film", "Ringraziamenti, iscrizione, prossimo video")
+        self.btn_outro.clicked.connect(lambda: self._pick_style("outro"))
+        self.btn_trans = SecondaryButton("Scegli le transizioni…", "sparkles", "Come cambia la scena tra titolo, clip e finale")
+        self.btn_trans.clicked.connect(self._pick_transition)
+        for b in (self.btn_title, self.btn_outro, self.btn_trans):
+            c.add(b)
+        self.trans_lbl = label("", "caption", True)
+        c.add(self.trans_lbl)
         self.fields_box = QWidget()
         self.fields_lay = QVBoxLayout(self.fields_box)
         self.fields_lay.setContentsMargins(0, 0, 0, 0)
@@ -294,6 +305,33 @@ class SimpleCheck(QWidget):
             cv.out_t = min(1.2, sc.duration)
             cv.update()
             cv.setToolTip("" if sc.enabled else "Questo profilo non ha questa schermata.")
+
+    def _pick_style(self, which: str):
+        from .. import templates as T
+        from .template_gallery import TemplateDialog
+        gr = self.state.spec.graphics
+        title = "Stile del titolo" if which == "title" else "Schermata finale"
+        dlg = TemplateDialog(which, gr.title_template if which == "title" else gr.outro_template, title, self)
+        if dlg.exec() and dlg.chosen:
+            (T.apply_title if which == "title" else T.apply_outro)(self.state.spec, dlg.chosen)
+            (gr.title if which == "title" else gr.outro).enabled = True
+            self.state.touch()
+            self._build_fields()
+
+    def _pick_transition(self):
+        from .. import transitions as TR
+        from .transition_gallery import TransitionDialog
+        gr = self.state.spec.graphics
+        dlg = TransitionDialog(gr.transition_style or gr.title.transition, self)
+        if dlg.exec() and dlg.chosen:
+            TR.apply_all(self.state.spec, dlg.chosen)
+            self.state.touch()
+            self._refresh_trans_label()
+
+    def _refresh_trans_label(self):
+        from .. import transitions as TR
+        sty = self.state.spec.graphics.transition_style or self.state.spec.graphics.title.transition
+        self.trans_lbl.setText(f"Transizione scelta: {TR.get(sty).label}")
 
     def _fill_profiles(self):
         names = self.state.settings.list_profiles()
@@ -322,12 +360,12 @@ class SimpleCheck(QWidget):
         for k in used:
             self.fields_lay.addWidget(label(VARIABLES[k]))
             e = QLineEdit(self.state.spec.variables.get(k, ""))
-            e.setPlaceholderText({"titolo": "es. Convegno sul futuro della città", "relatore": "es. Mario Rossi",
-                                  "ruolo": "es. Sindaco", "data": "es. 12 maggio 2026"}[k])
+            e.setPlaceholderText(VariablesForm.PLACEHOLDERS.get(k, ""))
             e.textChanged.connect(lambda t, kk=k: self._set_var(kk, t))
             self.fields_lay.addWidget(e)
             self._fields[k] = e
         self._refresh_previews()
+        self._refresh_trans_label()
 
     def _set_var(self, k: str, text: str):
         self.state.spec.variables[k] = text
@@ -624,7 +662,8 @@ class SimpleExport(QWidget):
 
     def _open_folder(self):
         if self._last_item:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(self._last_item.path).parent)))
+            from .platform_utils import reveal_in_folder
+            reveal_in_folder(self._last_item.path)        # apre la cartella con il video selezionato
 
     def _open_video(self):
         if self._last_item:

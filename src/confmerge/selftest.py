@@ -34,6 +34,8 @@ def run() -> int:
         th.theme.load_fonts()
         fams = QFontDatabase.families()
         assert "Inter" in fams, "font Inter non caricato"
+        for fam in ("Poppins", "Bebas Neue", "Anton"):
+            assert fam in fams, f"font {fam} non caricato (servono ai modelli dei titoli)"
         return f"{sum(1 for f in (th.RESOURCES / 'fonts').glob('Inter-*.ttf'))} file"
 
     def icons():

@@ -73,6 +73,8 @@ class Element:
     bold: bool = False
     italic: bool = False
     align: str = "center"
+    uppercase: bool = False        # TUTTO MAIUSCOLO (titoli stile YouTube)
+    fit_width: float = 0.0         # 0 = nessun limite; altrimenti il testo si rimpicciolisce per stare in questa frazione della larghezza
     line_spacing: float = 1.0
     letter_spacing: float = 0.0   # frazione dell'altezza
     fill: Fill = field(default_factory=Fill)
@@ -118,7 +120,8 @@ class Scene:
     background: Background = field(default_factory=Background)
     elements: list[Element] = field(default_factory=list)
     over_video: bool = False      # solo titolo: sulle prime immagini del video (sfondo trasparente)
-    fade: float = 0.5             # dissolvenza verso/dal video
+    fade: float = 0.5             # durata della transizione verso/dal video
+    transition: str = "fade"      # effetto della transizione (vedi transitions.py)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -138,12 +141,13 @@ class LowerThird:
     y: float = 0.82               # centro verticale
     accent: str = "#E94F37"
     font: str = "Segoe UI"
+    style: str = "bar"           # bar | pill | line | card | gradient | tag | underline | social
     anim_in: Anim = field(default_factory=lambda: Anim("slide_left", 0.6, "expo"))
     anim_out: Anim = field(default_factory=lambda: Anim("fade", 0.4, "ease_in_out"))
 
 
-VARIABLES = {"titolo": "Titolo dell'evento", "relatore": "Nome del relatore", "ruolo": "Ruolo del relatore",
-             "data": "Data"}
+VARIABLES = {"titolo": "Titolo", "sottotitolo": "Sottotitolo", "data": "Data", "relatore": "Nome del relatore",
+             "ruolo": "Ruolo del relatore", "social": "Canale o social (es. @nomecanale)"}
 
 
 def resolve_text(text: str, variables: dict[str, str] | None) -> str:
@@ -169,23 +173,77 @@ def substitute(elements: list[Element], variables: dict[str, str] | None) -> lis
     return out
 
 
+LOWER_THIRD_STYLES = {
+    "bar": "Barra", "pill": "Pillola", "line": "Linea", "card": "Scheda bianca", "gradient": "Sfumatura",
+    "tag": "Etichetta gialla", "underline": "Sottolineato", "social": "Social",
+}
+
+
 def lower_third_elements(lt: LowerThird, idx: int = 0, variables: dict[str, str] | None = None) -> list[Element]:
-    """Espande un lower third in elementi (barra accento + box + nome + ruolo)."""
+    """Espande un lower third negli elementi dello stile scelto (barre, box, nome, ruolo)."""
     lt = LowerThird(**{**lt.__dict__, "name": resolve_text(lt.name, variables), "role": resolve_text(lt.role, variables)})
     if not lt.name.strip() and not lt.role.strip():
         return []                      # nessun relatore indicato: niente lower third
     end = lt.start + lt.duration
     common = dict(start=lt.start, end=end, targets=["main"], anim_in=lt.anim_in, anim_out=lt.anim_out)
-    cx = lt.x
+    x, y = lt.x, lt.y
+    F = lt.font if lt.font not in ("", "Segoe UI") else "Poppins"
+    uid = f"lt{idx}"
+
+    def shape(n, cx, cy, w, h, color, radius=0.0, shape_="rect", **kw):
+        fill = kw.pop("fill", Fill(color=color))
+        return Element(id=f"{uid}_{n}", kind="shape", shape=shape_, x=cx, y=cy, w=w, h=h, fill=fill, radius=radius, **kw, **common)
+
+    def text(n, t_, cx, cy, size, color="#FFFFFF", bold=False, font=F, align="left", **kw):
+        kw.setdefault("fit_width", 0.31)          # un nome lungo si rimpicciolisce e resta nel box
+        return Element(id=f"{uid}_{n}", kind="text", text=t_, font=font, size=size, bold=bold, fill=Fill(color=color),
+                       x=cx, y=cy, align=align, **kw, **common)
+
+    st = lt.style
+    if st == "pill":
+        return [shape("bg", x + 0.19, y, 0.38, 0.115, "#12151C", 0.0575, opacity=0.88, shadow=Shadow(True, "#000000", 0.012, 0.006, 90, 0.5)),
+                shape("dot", x + 0.032, y, 0.012, 0.0213, lt.accent, shape_="ellipse"),
+                text("name", lt.name, x + 0.055, y - 0.019, 0.04, bold=True),
+                text("role", lt.role, x + 0.055, y + 0.026, 0.027, "#B6BDC9")]
+    if st == "line":
+        sh = Shadow(True, "#000000", 0.008, 0.003, 90, 0.9)
+        return [shape("bar", x + 0.002, y, 0.004, 0.11, lt.accent),
+                text("name", lt.name, x + 0.016, y - 0.024, 0.048, bold=True, shadow=sh),
+                text("role", lt.role, x + 0.016, y + 0.028, 0.03, "#FFFFFF", shadow=sh)]
+    if st == "card":
+        return [shape("bg", x + 0.19, y, 0.38, 0.125, "#FFFFFF", 0.006, shadow=Shadow(True, "#000000", 0.016, 0.006, 90, 0.35)),
+                shape("top", x + 0.19, y - 0.0585, 0.38, 0.008, lt.accent),
+                text("name", lt.name, x + 0.02, y - 0.012, 0.042, "#12151C", True),
+                text("role", lt.role, x + 0.02, y + 0.03, 0.027, "#5B6575")]
+    if st == "gradient":
+        g = Fill("gradient", lt.accent, "#00000000", 0.0)
+        return [shape("bg", x + 0.25, y, 0.5, 0.115, "", 0.0, fill=g),
+                text("name", lt.name, x + 0.018, y - 0.021, 0.044, bold=True),
+                text("role", lt.role, x + 0.018, y + 0.027, 0.028, "#FFFFFF")]
+    if st == "tag":
+        return [shape("bg", x + 0.17, y - 0.02, 0.34, 0.07, "#FACC15", 0.0, rotation=-1.5),
+                text("name", lt.name, x + 0.015, y - 0.02, 0.062, "#000000", False, "Anton", uppercase=True, rotation=-1.5),
+                shape("rbg", x + 0.13, y + 0.045, 0.26, 0.046, "#000000", 0.0, rotation=-1.5),
+                text("role", lt.role, x + 0.012, y + 0.045, 0.027, "#FFFFFF", False, "Poppins", rotation=-1.5)]
+    if st == "underline":
+        sh = Shadow(True, "#000000", 0.008, 0.003, 90, 0.8)
+        return [text("name", lt.name, x, y - 0.02, 0.05, bold=True, shadow=sh),
+                shape("ul", x + 0.09, y + 0.012, 0.18, 0.0045, lt.accent),
+                text("role", lt.role, x, y + 0.04, 0.03, "#FFFFFF", shadow=sh)]
+    if st == "social":
+        return [shape("bg", x + 0.17, y, 0.34, 0.1, "#FFFFFF", 0.05, shadow=Shadow(True, "#000000", 0.014, 0.005, 90, 0.35)),
+                text("name", lt.name, x + 0.03, y - 0.017, 0.037, "#12151C", True),
+                text("role", lt.role, x + 0.03, y + 0.025, 0.026, lt.accent, True)]
+    # bar (predefinito)
     return [
-        Element(id=f"lt{idx}_bg", kind="shape", shape="rect", x=cx + 0.17, y=lt.y, w=0.34, h=0.115,
+        Element(id=f"{uid}_bg", kind="shape", shape="rect", x=x + 0.17, y=y, w=0.34, h=0.115,
                 fill=Fill(color="#101820"), radius=0.004, opacity=0.8, **common),
-        Element(id=f"lt{idx}_bar", kind="shape", shape="rect", x=cx + 0.003, y=lt.y, w=0.006, h=0.115,
+        Element(id=f"{uid}_bar", kind="shape", shape="rect", x=x + 0.003, y=y, w=0.006, h=0.115,
                 fill=Fill(color=lt.accent), **common),
-        Element(id=f"lt{idx}_name", kind="text", text=lt.name, font=lt.font, size=0.042, bold=True,
-                x=cx + 0.017, y=lt.y - 0.021, align="left", **common),
-        Element(id=f"lt{idx}_role", kind="text", text=lt.role, font=lt.font, size=0.028,
-                fill=Fill(color="#D0D6DD"), x=cx + 0.017, y=lt.y + 0.025, align="left", **common),
+        Element(id=f"{uid}_name", kind="text", text=lt.name, font=F, size=0.042, bold=True, fit_width=0.31,
+                x=x + 0.017, y=y - 0.021, align="left", **common),
+        Element(id=f"{uid}_role", kind="text", text=lt.role, font=F, size=0.028, fit_width=0.31,
+                fill=Fill(color="#D0D6DD"), x=x + 0.017, y=y + 0.025, align="left", **common),
     ]
 
 

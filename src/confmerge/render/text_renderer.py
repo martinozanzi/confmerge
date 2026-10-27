@@ -102,17 +102,24 @@ class _Block:
     """Layout del testo: righe, unità (lettere/parole) e rettangolo del blocco."""
 
     def __init__(self, el: Element, W: int, H: int):
-        self.font = QFont(el.font)
-        self.font.setPixelSize(max(4, round(el.size * H)))
-        self.font.setBold(el.bold)
-        self.font.setItalic(el.italic)
-        if el.letter_spacing:
-            self.font.setLetterSpacing(QFont.AbsoluteSpacing, el.letter_spacing * H)
-        fm = QFontMetricsF(self.font)
-        self.lines = el.text.split("\n") if el.text else [""]
-        lh = fm.height() * el.line_spacing
-        widths = [fm.horizontalAdvance(s) for s in self.lines]
-        bw = max(widths + [1.0])
+        size_px = max(4, round(el.size * H))
+        for _ in range(3):                  # con fit_width il testo si rimpicciolisce finché sta nello spazio
+            self.font = QFont(el.font)
+            self.font.setPixelSize(size_px)
+            self.font.setBold(el.bold)
+            self.font.setItalic(el.italic)
+            if el.letter_spacing:
+                self.font.setLetterSpacing(QFont.AbsoluteSpacing, el.letter_spacing * H)
+            fm = QFontMetricsF(self.font)
+            self.lines = (el.text.upper() if el.uppercase else el.text).split("\n") if el.text else [""]
+            lh = fm.height() * el.line_spacing
+            widths = [fm.horizontalAdvance(s) for s in self.lines]
+            bw = max(widths + [1.0])
+            limit = el.fit_width * W
+            if el.fit_width > 0 and bw > limit and size_px > 8:
+                size_px = max(8, int(size_px * limit / bw))
+                continue
+            break
         bh = lh * len(self.lines)
         ax = el.x * W
         if el.align == "left":

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
-from . import audio_fx, credit, encoders, paths, slides as sl
+from . import audio_fx, credit, encoders, paths, slides as sl, transitions
 from .ffmpeg_wrapper import FFmpegError
 from .media_scan import MediaInfo
 from .pipeline import audio_filter, plan_segments
@@ -123,6 +123,24 @@ def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: fl
     return ",".join(ch)
 
 
+def _fade_of(scene: Scene) -> float:
+    """Durata della transizione di una scena; «taglio netto» = nessuna sovrapposizione."""
+    return 0.0 if scene.transition == "cut" else scene.fade
+
+
+def _join_dips(segs, tid: str, dur: float) -> str:
+    """Stacco tra due clip senza accorciare il video (l'audio esterno resta in sincronia): dissolvenza al nero o flash."""
+    tr = transitions.get(tid)
+    if not tr.join or not tr.color or dur <= 0 or len(segs) < 2:
+        return ""
+    half, parts, pos = dur / 2, [], 0.0
+    for s in segs[:-1]:
+        pos += s.length
+        parts.append(f"fade=t=out:st={max(0.0, pos - half):.3f}:d={half:.3f}:color={tr.color}")
+        parts.append(f"fade=t=in:st={pos:.3f}:d={half:.3f}:color={tr.color}")
+    return ",".join(parts)
+
+
 def kenburns_filter(spec: RenderSpec, W: int, H: int, t0: float) -> str:
     im = spec.image
     a, b = im.kb_t0, max(im.kb_t1, im.kb_t0 + 1e-3)
@@ -178,7 +196,10 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         g.f.append("[v0]null[vc]")
     else:
         g.f.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vc]")
-    cur = "vc"
+        dips = _join_dips(segs, im.clip_transition, im.clip_transition_dur)
+        if dips:
+            g.f.append(f"[vc]{dips}[vcd]")
+    cur = "vcd" if n > 1 and dips else "vc"
     if im.kenburns:
         g.f.append(f"[{cur}]{kenburns_filter(spec, W, H, t0)}[vk]")
         cur = "vk"
@@ -217,35 +238,35 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     g.f.append(f"[{a_in}:a:0]{','.join(achain)}[amain]")
 
     # --- 6. scene (titolo, outro, credito)
-    seq: list[tuple[str, str, float, float]] = []   # (video, audio, durata, dissolvenza verso la precedente)
+    seq: list[tuple[str, str, float, float, str]] = []   # (video, audio, durata, durata transizione dalla precedente, effetto)
     extra = 0.0
     if with_scenes:
         if gr.title.enabled and not gr.title.over_video:
             v, a, d, fr = _scene(g, gr.title, "title", W, H, fps, workdir, "t", extra=substitute([e for e in gr.elements if "title" in e.targets], spec.variables), variables=spec.variables)
-            seq.append((v, a, d, 0.0))
+            seq.append((v, a, d, 0.0, "cut"))
             frames += fr
             extra += d
-    seq.append(("vmain", "amain", D, gr.title.fade if (with_scenes and gr.title.enabled and not gr.title.over_video) else 0.0))
+    seq.append(("vmain", "amain", D, _fade_of(gr.title) if (with_scenes and gr.title.enabled and not gr.title.over_video) else 0.0, gr.title.transition))
     if with_scenes:
         if gr.outro.enabled:
             v, a, d, fr = _scene(g, gr.outro, "outro", W, H, fps, workdir, "u", extra=substitute([e for e in gr.elements if "outro" in e.targets], spec.variables), variables=spec.variables)
-            seq.append((v, a, d, gr.outro.fade))
+            seq.append((v, a, d, _fade_of(gr.outro), gr.outro.transition))
             frames += fr
             extra += d
         if spec.credit.enabled:
             qr = credit.qr_png(workdir / "qr.png") if spec.credit.qr else None
             cs = credit.credit_scene(spec.credit.duration, qr)
             v, a, d, fr = _scene(g, cs, "outro", W, H, fps, workdir, "c", fade_inout=credit.FADE)
-            seq.append((v, a, d, 0.0))
+            seq.append((v, a, d, 0.0, "cut"))
             frames += fr
             extra += d
 
-    cv, ca, clen, _ = seq[0]
-    for i, (nv, na, nl, f) in enumerate(seq[1:], 1):
+    cv, ca, clen = seq[0][:3]
+    for i, (nv, na, nl, f, tr) in enumerate(seq[1:], 1):
         ov, oa = f"xv{i}", f"xa{i}"
         if f > 0:
             f = min(f, clen / 2, nl / 2)
-            g.f.append(f"[{cv}][{nv}]xfade=transition=fade:duration={f:.3f}:offset={clen - f:.4f}[{ov}]")
+            g.f.append(f"[{cv}][{nv}]xfade=transition={transitions.get(tr).xfade or 'fade'}:duration={f:.3f}:offset={clen - f:.4f}[{ov}]")
             g.f.append(f"[{ca}][{na}]acrossfade=d={f:.3f}[{oa}]")
             clen += nl - f
         else:

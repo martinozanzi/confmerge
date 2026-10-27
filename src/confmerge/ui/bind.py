@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QSpinBox)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QSpinBox)
 
 
 def _set(obj, attr, v, cb):
@@ -63,20 +62,27 @@ def line(obj, attr, cb: Callable = lambda: None) -> QLineEdit:
 
 
 def color(obj, attr, cb: Callable = lambda: None) -> QPushButton:
+    """Pulsante-campione: apre il selettore colore a comparsa (si chiude cliccando fuori)."""
+    from .color_picker import ColorPicker
     w = QPushButton()
-    w.setMinimumWidth(64)
+    w.setMinimumWidth(72)
+    w.setToolTip("Clicca per scegliere il colore")
 
     def paint():
+        from .theme import theme
         c = getattr(obj, attr)
-        w.setStyleSheet(f"background:{c}; border:1px solid #666;")
+        w.setStyleSheet(f"background:{c}; border:1px solid {theme.t.border}; border-radius:8px;")
         w.setText("")
 
     def pick():
-        c = QColorDialog.getColor(QColor(getattr(obj, attr)), w, "Colore")
-        if c.isValid():
-            setattr(obj, attr, c.name())
+        pk = ColorPicker(getattr(obj, attr), w)
+
+        def live(col: str):
+            setattr(obj, attr, col)
             paint()
             cb()
+        pk.colorChanged.connect(live)
+        pk.show_below(w)
 
     paint()
     w.clicked.connect(pick)

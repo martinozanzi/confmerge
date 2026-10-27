@@ -18,8 +18,8 @@ def logo(size: int) -> QImage:
     p = QPainter(img)
     p.setRenderHint(QPainter.Antialiasing)
     g = QLinearGradient(0, 0, size, size)
-    g.setColorAt(0, QColor("#00C2FF"))
-    g.setColorAt(1, QColor("#7B2FF7"))
+    g.setColorAt(0, QColor("#2563EB"))
+    g.setColorAt(1, QColor("#22D3EE"))
     p.setBrush(g)
     p.setPen(Qt.NoPen)
     p.drawRoundedRect(QRectF(0, 0, size, size), size * 0.22, size * 0.22)
@@ -35,7 +35,7 @@ def logo(size: int) -> QImage:
 
 
 s = QImage(560, 260, QImage.Format_RGB32)
-s.fill(QColor("#10151c"))
+s.fill(QColor("#0E1014"))
 p = QPainter(s)
 p.setRenderHint(QPainter.Antialiasing)
 p.drawImage(32, 62, logo(120))

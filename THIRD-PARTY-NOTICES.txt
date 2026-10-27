@@ -70,6 +70,15 @@ unmodified; the license text is in confmerge/resources/fonts/Inter-OFL.txt.
   https://rsms.me/inter/   License: https://openfontlicense.org
 
 -------------------------------------------------------------------------------
+5b-2. Title fonts - SIL Open Font License 1.1 (Google Fonts)
+-------------------------------------------------------------------------------
+Bundled unmodified in confmerge/resources/fonts, each with its own license text (OFL-<family>.txt), and used by
+the ready-made title templates so that they look the same on every computer:
+  Poppins (Indian Type Foundry), Bebas Neue (Dharma Type), Anton (Vernon Adams), DM Serif Display (Colophon Foundry),
+  Pacifico (Vernon Adams, Jacques Le Bailly, Botjo Nikoltchev, Ben Weiner), Space Mono (Colophon Foundry).
+  https://fonts.google.com   License: https://openfontlicense.org
+
+-------------------------------------------------------------------------------
 5c. Lucide (icons) - ISC License
 -------------------------------------------------------------------------------
 Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT).

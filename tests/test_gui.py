@@ -105,7 +105,7 @@ def test_switch_modes_without_losing_anything(app_window, media):
     assert (proj.trim_start, proj.trim_end) == trim and st.spec.variables["titolo"] == "Titolo di prova"
     assert not w.adv.nav.buttons[2]._state == "locked"                       # fasi sbloccate col progetto
     w.adv.goto(3, animate=False)
-    w.adv.graphics.tabs.setCurrentIndex(0)
+    w.adv.titles.tabs.setCurrentIndex(0)
     w.set_mode("simple", animate=False)
     assert w.mode == "simple" and st.spec.credit.duration == 4.0 and st.project is proj
     assert w.simple.step == 1 and w.simple.check._fields["titolo"].text() == "Titolo di prova"
@@ -120,7 +120,7 @@ def test_advanced_flow_layers_undo_and_export(app_window, media, tmp_path):
     adv.start_analysis()
     wait(app, lambda: st.project is not None and adv.current() == 1)
     w.review.apply_suggestion()
-    adv.goto(3, animate=False)
+    adv.goto(4, animate=False)
     from confmerge.ui.graphics_page import new_element
     el = new_element("text")
     el.text = "Evento"
@@ -150,7 +150,7 @@ def test_advanced_flow_layers_undo_and_export(app_window, media, tmp_path):
     st.spec.export.preset, st.spec.export.custom_height = "Personalizzato", 360
     st.spec.export.out_dir, st.spec.export.name = str(tmp_path / "out2"), "avanzato"
     st.spec.export.encoder = "libx264"
-    adv.goto(6, animate=False)
+    adv.goto(7, animate=False)
     wait(app, lambda: st.export.est is not None)
     adv.export.enqueue(True)
     wait(app, lambda: st.queue.items and st.queue.items[0].status in ("completato", "errore"), 400)
