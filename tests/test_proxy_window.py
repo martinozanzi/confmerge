@@ -61,7 +61,7 @@ def test_window_around(rep):
     assert 0 <= a <= 35.0 <= b <= r.project.total_duration
 
 
-def test_player_coalesces_seeks_and_requests_windows(rep, qt_app, tmp_path):
+def test_player_coalesces_seeks_and_requests_windows(rep, qt_app, tmp_path, monkeypatch):
     from confmerge.settings import Settings
     from confmerge.ui.player import PlayerWidget
     from confmerge.ui.state import AppState
@@ -74,6 +74,7 @@ def test_player_coalesces_seeks_and_requests_windows(rep, qt_app, tmp_path):
     pl.load(out, 5.0, 15.0, 40.0)
     needed, calls = [], []
     pl.windowNeeded.connect(needed.append)
+    monkeypatch.setattr("confmerge.ui.player.NO_PLAYER", False)    # qui serve il percorso reale verso il lettore
     pl.player.setPosition = lambda ms: calls.append(ms)       # conta le richieste vere al backend
     for _ in range(300):                                      # molti click ravvicinati
         pl.set_position(random.uniform(5.0, 20.0))

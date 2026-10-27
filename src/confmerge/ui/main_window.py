@@ -336,7 +336,9 @@ class MainWindow(QMainWindow):
         toast(self, "Informazioni copiate. Incollale in un messaggio (Ctrl+V) per chiedere assistenza.", "ok")
 
     def settings_dialog(self):
-        SettingsDialog(self.state, self).exec()
+        SettingsDialog(self.active_state, self).exec()
+        for st in (self.state, self.social_state):
+            st.keys_changed.emit()                      # le schede dei sottotitoli rileggono la chiave appena salvata
 
     # ------------------------------------------------------------------ progetto
     def _states(self) -> list[AppState]:

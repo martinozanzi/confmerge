@@ -14,6 +14,7 @@ import time
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("CONFMERGE_NO_CONFIRM", "1")
 os.environ.setdefault("CONFMERGE_NO_RECOVERY", "1")
+os.environ.setdefault("CONFMERGE_NO_PLAYER", "1")
 os.environ.setdefault("CONFMERGE_APP", "merge")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -208,8 +209,26 @@ def main():
     w.social.show_step(2, animate=False)
     sst.spec.social.platforms = ["shorts", "reels", "youtube"]
     w.social.look.sync()
+    sst.spec.subtitles.enabled = True
+    from confmerge.ui.social_style import new_text
+    sst.spec.graphics.elements.append(new_text(sst, "tc"))
+    sst.spec.graphics.elements[-1].text = "Assemblea cittadina"
+    sst.touch()
+    w.social.look.sync()
+    w.social.look.safe.setChecked(True)
     pump(app, 30)
     snap("o2-aspetto")
+    from PySide6.QtWidgets import QScrollArea
+    for k, sa in enumerate(w.social.look.findChildren(QScrollArea)[:1]):
+        sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum() // 2)
+    pump(app, 10)
+    snap("o2-aspetto-meta")
+    for sa in w.social.look.findChildren(QScrollArea)[:1]:
+        sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum())
+    pump(app, 10)
+    snap("o2-aspetto-fondo")
+    for sa in w.social.look.findChildren(QScrollArea)[:1]:
+        sa.verticalScrollBar().setValue(0)
     w.social.show_step(3, animate=False)
     pump(app, 10)
     snap("o3-esporta")

@@ -107,7 +107,7 @@ def test_social_flow_load_cut_export(win, clip):
     look.fr_mode.setValue("blur")
     look._frame_mode("blur")
     assert st.spec.image.reframe == "blur"
-    assert look.player.canvas.safe_zone != (0.0, 0.0, 0.0, 0.0)
+    assert look.player.canvas.safe_zones and look.player.canvas.safe_common != (0.0, 0.0, 0.0, 0.0)
     # esportazione di due versioni
     win.social.show_step(3, animate=False)
     ex = win.social.export
@@ -156,7 +156,7 @@ def test_safe_zone_and_preview_paint(win, clip):
     win.social.start.start([clip])
     assert wait(lambda: st.project is not None and win.social.step == 1)
     win.social.show_step(2, animate=False)
-    win.social.look.player.canvas.safe_zone = (0.1, 0.2, 0.04, 0.14)
+    win.social.look.player.canvas.safe_zones = [{"name": "x", "color": "#EF4444", "safe": (0.1, 0.2, 0.04, 0.14)}]
     img = win.social.look.player.canvas.grab()
     assert not img.isNull()
     win.social.cut.wave.set_removed([(1.0, 2.0)])
