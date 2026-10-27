@@ -4,6 +4,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("CONFMERGE_NO_REVEAL", "1")
 os.environ.setdefault("CONFMERGE_NO_CONFIRM", "1")           # niente finestre «lavoro non salvato» nei test
 os.environ.setdefault("CONFMERGE_NO_RECOVERY", "1")
+os.environ.setdefault("CONFMERGE_NO_PLAYER", "1")            # nessun lettore multimediale reale nei test (si bloccava a caso)
 os.environ.setdefault("CONFMERGE_APP", "merge")               # i test della GUI partono dal merge, non dalla schermata iniziale
 
 import numpy as np

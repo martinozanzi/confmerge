@@ -6,6 +6,7 @@ Le posizioni sono SEMPRE sulla linea temporale del video unito. Il file di antep
 from __future__ import annotations
 
 import logging
+import os
 
 from PySide6.QtCore import QTimer, QUrl, Qt, Signal
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
@@ -16,6 +17,7 @@ from .widgets import IconButton
 
 log = logging.getLogger(__name__)
 FRAME = 0.04
+NO_PLAYER = bool(os.environ.get("CONFMERGE_NO_PLAYER"))      # nei test senza schermo il lettore multimediale può bloccarsi: si salta
 
 
 def fmt(t: float) -> str:
@@ -94,6 +96,8 @@ class PlayerWidget(QWidget):
     def load(self, path, origin: float, length: float, total: float) -> None:
         self.origin, self.length, self.duration = origin, length, total
         self.set_message("")
+        if NO_PLAYER:
+            return
         self.player.stop()
         self.player.setSource(QUrl.fromLocalFile(str(path)))
         self.player.pause()
@@ -124,6 +128,8 @@ class PlayerWidget(QWidget):
     def _apply_seek(self) -> None:
         t, self._pending_seek = self._pending_seek, None
         if t is None:
+            return
+        if NO_PLAYER:
             return
         try:
             self.player.setPosition(int(min(max(0.0, t - self.origin), self.length) * 1000))
