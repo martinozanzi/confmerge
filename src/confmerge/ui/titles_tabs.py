@@ -49,7 +49,7 @@ class TemplateTab(QWidget):
         self.note = label("", "caption", True)
         lay.addWidget(self.note)
         if kind == "caption":
-            b = SecondaryButton("Sposta o modifica le scritte…", "layers", "Apre «Logo e decorazioni»")
+            b = SecondaryButton("Sposta o modifica le scritte…", "layers", "Apre «Logo e grafica»")
             b.clicked.connect(self.goDecorations)
             row = QHBoxLayout()
             row.addWidget(b)

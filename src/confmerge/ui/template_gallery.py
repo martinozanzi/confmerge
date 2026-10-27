@@ -168,6 +168,9 @@ class TemplateGallery(QWidget):
                 n += 1
         self.set_current(self.current)
 
+    def minimumSizeHint(self):
+        return QSize(THUMB_W + 12, super().minimumSizeHint().height())     # le colonne si adattano alla larghezza disponibile
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._layout_cards()

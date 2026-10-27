@@ -225,6 +225,9 @@ class TransitionGallery(QWidget):
             self.grid.addWidget(c, n // cols, n % cols)
         self.set_current(self.current)
 
+    def minimumSizeHint(self):
+        return QSize(PW + 12, super().minimumSizeHint().height())     # le colonne si adattano alla larghezza disponibile
+
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._layout_cards()

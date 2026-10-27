@@ -26,8 +26,8 @@ class _WidthWatcher(QObject):
         return False
 
 
-PHASES = [("folder-open", "Sorgenti"), ("audio-waveform", "Sincronia e tagli"), ("crop", "Formato e ritaglio"),
-          ("type", "Titoli e transizioni"), ("layers", "Logo e decorazioni"), ("presentation", "Slide e PiP"),
+PHASES = [("folder-open", "Sorgenti"), ("audio-waveform", "Sincronia e tagli"), ("crop", "Formato"),
+          ("type", "Titoli e transizioni"), ("layers", "Logo e grafica"), ("presentation", "Slide e PiP"),
           ("volume-2", "Audio"), ("download", "Export e coda")]
 DECORATIONS = 4
 
@@ -43,7 +43,7 @@ class AdvancedShell(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         self.nav = SideNav(PHASES)
-        self.nav.setFixedWidth(232)
+        self.nav.setFixedWidth(248)
         lay.addWidget(self.nav)
         self.stack = QStackedWidget()
         body = QWidget()
@@ -61,12 +61,12 @@ class AdvancedShell(QWidget):
         self.stack.addWidget(self.src_stack)
         self.review = ReviewPage(state)
         self.stack.addWidget(self.review)
-        self.image = GraphicsPage(state, self.review, ("image",), "Formato e ritaglio",
+        self.image = GraphicsPage(state, self.review, ("image",), "Formato",
                                   "Formato, ritaglio, zoom e dissolvenze. L'anteprima mostra il risultato.")
         self.titles = GraphicsPage(state, self.review, ("title", "lt", "caption", "outro", "trans", "credit"),
                                    "Titoli e transizioni",
                                    "Scegli un modello pronto, scrivi i testi e decidi come cambiano le scene.")
-        self.graphics = GraphicsPage(state, self.review, ("overlay",), "Logo e decorazioni",
+        self.graphics = GraphicsPage(state, self.review, ("overlay",), "Logo e grafica",
                                      "Logo, scritte, forme e barra di avanzamento sopra il video: i livelli si trascinano.")
         self.titles.goPhase.connect(lambda _k: self.goto(DECORATIONS))
         self.slides = GraphicsPage(state, self.review, ("slides",), "Slide e PiP",

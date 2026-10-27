@@ -18,7 +18,7 @@ Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia i
 3. **Esporta**: scegli «Consigliata per YouTube», «Più veloce» o «Massima qualità», vedi tempo e dimensione, premi «Esporta il video».
    Alla fine: «Apri la cartella», «Guarda il video», «Crea la miniatura», «Nuovo progetto».
 
-**Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Formato e ritaglio, Titoli e transizioni, Logo e decorazioni, Slide e PiP, Audio, Export e coda),
+**Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Formato, Titoli e transizioni, Logo e grafica, Slide e PiP, Audio, Export e coda),
 anteprima sempre visibile, sezioni comprimibili con ricerca rapida, pannello livelli (occhio, lucchetto, trascinamento),
 mini-timeline, annulla/ripristina, coda di export, parametri tecnici in «Avanzate» (chiuse di default).
 
