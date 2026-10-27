@@ -1,12 +1,15 @@
 """Tela di anteprima WYSIWYG: video + ritaglio/zoom + slide/PiP + grafica, con lo stesso codice dell'export."""
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from .. import slides as sl, subtitles
 from ..brand import brand_elements
+from ..render import anchors
 from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
@@ -34,7 +37,8 @@ class Canvas(QWidget):
         self.scene_target = "main"
         self.elements_override: list[Element] | None = None
         self.fixed_size: tuple[int, int] | None = None   # es. miniatura 1280×720
-        self.safe_zone = (0.0, 0.0, 0.0, 0.0)            # sopra, sotto, sinistra, destra (frazioni): Studio Social
+        self.safe_zones: list[dict] = []                 # Studio Social: [{name, color, safe=(sopra, sotto, sinistra, destra)}]
+        self.safe_common = (0.0, 0.0, 0.0, 0.0)          # area sicura per tutte le piattaforme mostrate
         self.out_t = 0.0                 # tempo di uscita
         self.seg_dur = 1e9
         self.selected = -1
@@ -74,8 +78,8 @@ class Canvas(QWidget):
             return self.elements_override
         gr = self.state.spec.graphics
         vs = self.state.spec.variables
-        els = substitute([e for e in gr.elements if "main" in e.targets], vs)
         W, H = self.frame_size()
+        els = anchors.resolve(substitute([e for e in gr.elements if "main" in e.targets], vs), W, H, self.state.spec.brand.safe)
         els += brand_elements(self.state.spec, W, H)
         for i, lt in enumerate(gr.lower_thirds):
             els += lower_third_elements(lt, i, vs)
@@ -132,12 +136,17 @@ class Canvas(QWidget):
 
     def _draw_subtitle(self, img: QImage, W: int, H: int) -> QImage:
         st = self.state.spec.subtitles
-        if not st.enabled or not st.lines:
+        if not st.enabled:
             return img
-        ln = subtitles.active_line(st, self.state.from_out(self.out_t))
-        if ln is None:
-            return img
-        return compositor.render_frame([subtitles.preview_element(st, ln.text, W, H)], W, H, 1.0, 1e9, img)
+        sampling = time.monotonic() < self.state.subtitle_sample_until
+        if sampling or not st.lines:                         # frase di esempio: si vede lo stile anche prima di creare i sottotitoli
+            text = subtitles.SAMPLE_TEXT
+        else:
+            ln = subtitles.active_line(st, self.state.from_out(self.out_t))
+            if ln is None:
+                return img
+            text = ln.text
+        return compositor.render_frame([subtitles.preview_element(st, text, W, H, self.state.spec.brand.safe)], W, H, 1.0, 1e9, img)
 
     def _is_social(self) -> bool:
         pr = self.state.project
@@ -153,30 +162,38 @@ class Canvas(QWidget):
         p.fillRect(QRectF(0, 0, W, H), QColor(0, 0, 0, 40))
 
     def _draw_safe_zone(self, p: QPainter, tr: QRectF) -> None:
-        """Le parti dell'immagine coperte dall'interfaccia della piattaforma (solo anteprima: non finiscono nel file)."""
-        top, bottom, left, right = self.safe_zone
-        if not (top or bottom or left or right):
-            return
-        zones = [QRectF(tr.x(), tr.y(), tr.width(), tr.height() * top),
-                 QRectF(tr.x(), tr.bottom() - tr.height() * bottom, tr.width(), tr.height() * bottom),
-                 QRectF(tr.x(), tr.y() + tr.height() * top, tr.width() * left, tr.height() * (1 - top - bottom)),
-                 QRectF(tr.right() - tr.width() * right, tr.y() + tr.height() * top, tr.width() * right,
-                        tr.height() * (1 - top - bottom))]
-        p.setPen(Qt.NoPen)
-        p.setBrush(QBrush(QColor(255, 70, 70, 70), Qt.BDiagPattern))
-        edge = QPen(QColor(255, 110, 110, 200), 1, Qt.DashLine)
-        for z in zones:
-            if z.width() > 1 and z.height() > 1:
-                p.setPen(Qt.NoPen)
-                p.setBrush(QColor(255, 70, 70, 45))
-                p.drawRect(z)
-                p.setBrush(QBrush(QColor(255, 120, 120, 90), Qt.BDiagPattern))
-                p.drawRect(z)
-        inner = QRectF(tr.x() + tr.width() * left, tr.y() + tr.height() * top,
-                       tr.width() * (1 - left - right), tr.height() * (1 - top - bottom))
-        p.setBrush(Qt.NoBrush)
-        p.setPen(edge)
-        p.drawRect(inner)
+        """Le parti dell'immagine coperte dall'interfaccia di ogni piattaforma, ciascuna di un colore, e l'area sicura per tutte
+        (solo anteprima: non finiscono nel file)."""
+        for z in self.safe_zones:
+            top, bottom, left, right = z["safe"]
+            col = QColor(z["color"])
+            fill, hatch, edge = QColor(col), QColor(col), QColor(col)
+            fill.setAlpha(42)
+            hatch.setAlpha(95)
+            edge.setAlpha(230)
+            rects = [QRectF(tr.x(), tr.y(), tr.width(), tr.height() * top),
+                     QRectF(tr.x(), tr.bottom() - tr.height() * bottom, tr.width(), tr.height() * bottom),
+                     QRectF(tr.x(), tr.y() + tr.height() * top, tr.width() * left, tr.height() * (1 - top - bottom)),
+                     QRectF(tr.right() - tr.width() * right, tr.y() + tr.height() * top, tr.width() * right,
+                            tr.height() * (1 - top - bottom))]
+            p.setPen(Qt.NoPen)
+            for r in rects:
+                if r.width() > 1 and r.height() > 1:
+                    p.setBrush(fill)
+                    p.drawRect(r)
+                    p.setBrush(QBrush(hatch, Qt.BDiagPattern))
+                    p.drawRect(r)
+            inner = QRectF(tr.x() + tr.width() * left, tr.y() + tr.height() * top,
+                           tr.width() * (1 - left - right), tr.height() * (1 - top - bottom))
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(edge, 2, Qt.DashLine))
+            p.drawRect(inner)
+        if self.safe_zones and any(self.safe_common):
+            top, bottom, left, right = self.safe_common
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(QColor("#22C55E"), 2))
+            p.drawRect(QRectF(tr.x() + tr.width() * left, tr.y() + tr.height() * top,
+                              tr.width() * (1 - left - right), tr.height() * (1 - top - bottom)))
 
     def _main_dur(self) -> float:
         pr = self.state.project
@@ -262,7 +279,7 @@ class Canvas(QWidget):
         self._draw_stage(p, tr)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         p.drawImage(tr, img)
-        if self.mode == "video" and self.safe_zone != (0.0, 0.0, 0.0, 0.0):
+        if self.mode == "video" and self.safe_zones:
             self._draw_safe_zone(p, tr)
         if self.mode == "crop" and self._crop_rect is not None:
             r = self._crop_rect

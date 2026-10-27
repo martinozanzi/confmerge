@@ -64,6 +64,7 @@ class Element:
     targets: list[str] = field(default_factory=lambda: ["main"])
     visible: bool = True          # «occhio» del pannello livelli
     locked: bool = False          # «lucchetto»: non si sposta col mouse
+    anchor: str = ""              # angolo/lato dove sta («tl», «tc», «mr», «bc»…): si ricalcola per ogni formato; vuoto = x, y liberi
     anim_in: Anim = field(default_factory=Anim)
     anim_out: Anim = field(default_factory=Anim)
     # testo

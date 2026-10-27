@@ -88,6 +88,7 @@ class AppState(QObject):
     profile_changed = Signal()    # profilo applicato o annullamento: le viste si ricostruiscono
 
     cuts_changed = Signal()       # Studio Social: cambiati gli intervalli tenuti (tagli, annulla/ripristina)
+    keys_changed = Signal()       # chiave API salvata, provata o tolta nelle Impostazioni
 
     def __init__(self, settings: Settings | None = None, kind: str = "merge"):
         super().__init__()
@@ -108,6 +109,7 @@ class AppState(QObject):
         self.proxy_range: tuple[float, float] = (0.0, 0.0)   # parte della linea temporale coperta dall'anteprima
         self.warnings: list[str] = []
         self.last_frame = None            # ultimo QImage del player (sfondo per l'editor grafico)
+        self.subtitle_sample_until = 0.0  # fino a quando mostrare la frase di esempio dei sottotitoli (secondi monotonici)
         self.queue = ExportQueue()
         self.sample_cache: dict = {}
         from ..brand_kit import KitStore

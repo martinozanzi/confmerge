@@ -32,6 +32,7 @@ class ApiKeysCard(Card):
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.keys = state.settings.keys
+        self.state = state
         self.add(label("Sottotitoli automatici", "h2"))
         self.add(label("Per creare i sottotitoli serve una chiave gratuita di Groq: si paga solo quello che si usa, "
                        "circa 4 centesimi di dollaro per ogni ora di video. L'audio viene inviato a Groq solo quando "
@@ -81,11 +82,13 @@ class ApiKeysCard(Card):
     def save(self):
         self.keys.set("groq", self.edit.text())
         self.status.setText(self._status_text())
+        self.state.keys_changed.emit()
 
     def clear(self):
         self.edit.clear()
         self.keys.set("groq", "")
         self.status.setText(self._status_text())
+        self.state.keys_changed.emit()
 
     def test(self):
         self.save()

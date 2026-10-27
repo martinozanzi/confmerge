@@ -16,6 +16,7 @@ from .brand_card import BrandCard
 from .graphics_page import scrolled
 from .music_card import MusicCard
 from .player import PlayerWidget
+from .social_style import OverlaysCard, StyleTemplateCard
 from .subtitles_tab import SimpleSubtitlesCard
 from .theme import S2
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, SecondaryButton, Segmented,
@@ -23,6 +24,8 @@ from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, Pr
 from .widgets.anim import fade_in, stagger_cards
 
 STEPS = ["Video", "Taglia", "Aspetto", "Esporta"]
+ZONE_COLORS = {"youtube": "#3B82F6", "shorts": "#EF4444", "reels": "#D946EF", "tiktok": "#22D3EE", "threads": "#F59E0B",
+               "instagram": "#84CC16", "x": "#94A3B8"}
 SENSITIVITY = [("Delicata", (45.0, 1.0)), ("Normale", (35.0, 0.7)), ("Decisa", (25.0, 0.45))]
 
 
@@ -297,6 +300,7 @@ class SocialLook(QWidget):
         super().__init__(parent)
         self.state = state
         self.root = state.settings.root
+        self._hidden: set[str] = set()
         main = QVBoxLayout(self)
         main.addWidget(label("Aspetto", "title"))
         main.addWidget(label("Scegli dove pubblicare e come entra l'immagine. Le zone rosse sono coperte dall'app: "
@@ -350,8 +354,16 @@ class SocialLook(QWidget):
         self.safe.toggled.connect(self._safe)
         sc = Card()
         sc.add(self.safe)
+        self.legend_box = QWidget()
+        self.legend_lay = QVBoxLayout(self.legend_box)
+        self.legend_lay.setContentsMargins(0, 0, 0, 0)
+        sc.add(self.legend_box)
+        sc.add(label("Ogni piattaforma ha la sua zona colorata (la loro interfaccia copre quelle parti). La linea verde è "
+                     "l'area sicura per tutte: tieni lì dentro i testi importanti.", "caption", True))
         pl.addWidget(sc)
+        pl.addWidget(StyleTemplateCard(state))
         pl.addWidget(BrandCard(state))
+        pl.addWidget(OverlaysCard(state))
         pl.addWidget(SimpleSubtitlesCard(state, open_settings))
         pl.addWidget(MusicCard(state))
         pl.addStretch(1)
@@ -422,8 +434,13 @@ class SocialLook(QWidget):
         st.spec.export.preset, st.spec.export.custom_height = "Personalizzato", p.short
         same_aspect = [q for q in self.selected() if q.aspect == p.aspect]
         safe = PF.common_safe(same_aspect)
-        self.player.canvas.safe_zone = safe if st.spec.social.show_safe else (0.0, 0.0, 0.0, 0.0)
-        st.spec.brand.safe = list(safe)                  # i loghi stanno sempre dentro la zona non coperta dall'app
+        st.spec.brand.safe = list(safe)                  # loghi e testi stanno sempre dentro la zona non coperta dall'app
+        self._legend(same_aspect)
+        shown = [q for q in same_aspect if q.id not in self._hidden and any(q.safe)]
+        cv = self.player.canvas
+        cv.safe_zones = [{"name": q.name, "color": ZONE_COLORS.get(q.id, "#EF4444"), "safe": q.safe}
+                         for q in shown] if st.spec.social.show_safe else []
+        cv.safe_common = PF.common_safe(shown)
         self.player.canvas.update()
         # inquadratura: serve solo se il video non ha già il formato scelto
         ref = st.clips[0] if st.clips else None
@@ -458,6 +475,29 @@ class SocialLook(QWidget):
         self.state.spec.image.reframe_x = v / 100
         self.state.touch()
         self.player.canvas.update()
+
+    def _legend(self, plats):
+        """Una riga per piattaforma con il suo colore: si può accendere o spegnere la sua zona nell'anteprima."""
+        while self.legend_lay.count():
+            it = self.legend_lay.takeAt(0)
+            w = it.widget()
+            if w:
+                w.hide()
+                w.setParent(None)
+                w.deleteLater()
+        for q in plats:
+            if not any(q.safe):
+                continue
+            col = ZONE_COLORS.get(q.id, "#EF4444")
+            t = Toggle(f"{q.name}")
+            t.setStyleSheet(f"QCheckBox {{ color: {col}; font-weight: 600; }}")
+            t.setChecked(q.id not in self._hidden)
+            t.toggled.connect(lambda on, pid=q.id: self._zone_toggle(pid, on))
+            self.legend_lay.addWidget(t)
+
+    def _zone_toggle(self, pid: str, on: bool):
+        self._hidden.discard(pid) if on else self._hidden.add(pid)
+        self._preview_changed()
 
     def _safe(self, on: bool):
         self.state.spec.social.show_safe = on

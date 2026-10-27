@@ -30,6 +30,11 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
 3. **Aspetto**: scegli le piattaforme (YouTube, YouTube Shorts, Instagram Reel, TikTok, Threads, Instagram quadrato, X),
    come entra il video orizzontale nel formato verticale (**Riempi** con posizione regolabile, **Sfocato**, **Bande**), le zone
    coperte dall'app (solo in anteprima, mai nel file), i sottotitoli e la musica.
+   Le zone sono **una per piattaforma, ognuna del suo colore**, con una legenda per accenderle e spegnerle; la linea verde è l'area sicura
+   per tutte quelle scelte. Loghi, testi e sottotitoli restano dentro la zona non coperta (nell'export di ogni piattaforma).
+   I **sottotitoli** hanno grandezza, posizione e distanza dal bordo regolabili e, finché non li crei, nell'anteprima vedi una frase
+   di esempio con lo stile scelto. **Testi e immagini sul video** si aggiungono con un clic e si ancorano a un angolo o a un lato.
+   Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
    I sottotitoli sono spostati sopra la zona coperta dall'app e la voce è portata a un livello adatto ai social.
 

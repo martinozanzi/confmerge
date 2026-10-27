@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtGui import QImage
 
 from .brand import brand_elements
+from .render import anchors
 from . import audio_fx, credit, edl, encoders, paths, slides as sl, subtitles, transitions
 from .ffmpeg_wrapper import FFmpegError
 from .media_scan import MediaInfo
@@ -207,7 +208,7 @@ def kenburns_filter(spec: RenderSpec, W: int, H: int, t0: float) -> str:
 
 def _graphics_elements(spec: RenderSpec, D: float, W: int = 1920, H: int = 1080) -> list[Element]:
     gr = spec.graphics
-    els = substitute([e for e in gr.elements if "main" in e.targets], spec.variables)
+    els = anchors.resolve(substitute([e for e in gr.elements if "main" in e.targets], spec.variables), W, H, spec.brand.safe)
     els += brand_elements(spec, W, H)                       # loghi del kit del marchio
     for i, lt in enumerate(gr.lower_thirds):
         els += lower_third_elements(lt, i, spec.variables)

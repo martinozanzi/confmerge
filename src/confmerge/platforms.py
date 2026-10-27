@@ -81,12 +81,8 @@ def variant_spec(base: RenderSpec, p: Platform) -> RenderSpec:
     s.image.kenburns = False
     s.brand.safe = list(p.safe)                     # i loghi restano dentro la zona non coperta dall'app
     s.export.preset, s.export.custom_height = "Personalizzato", p.short
-    top, bottom = p.safe[0], p.safe[1]
-    sub = s.subtitles
-    if sub.position == "bottom":
-        sub.margin = max(sub.margin, bottom + 0.02)
-    elif sub.position == "top":
-        sub.margin = max(sub.margin, top + 0.02)
+    from .subtitles import effective_margin
+    s.subtitles.margin = effective_margin(s.subtitles, p.safe)
     return s
 
 

@@ -11,6 +11,7 @@ from PySide6.QtGui import QFont, QFontMetricsF
 from .render.model import Box, Element, Fill, Outline, Shadow
 from .spec import SubLine, SubtitleSettings
 
+SAMPLE_TEXT = "Così si leggeranno i sottotitoli"
 SIDE_MARGIN = 0.06                  # margine laterale (frazione della larghezza): il testo va a capo dentro
 POSITIONS = {"bottom": "In basso", "middle": "Al centro", "top": "In alto"}
 
@@ -202,10 +203,21 @@ def wrap_text(st: SubtitleSettings, text: str, W: int, H: int) -> str:
     return "\n".join(out)
 
 
-def preview_element(st: SubtitleSettings, text: str, W: int, H: int) -> Element:
+def effective_margin(st: SubtitleSettings, safe: list | tuple | None = None) -> float:
+    """Distanza dal bordo davvero usata: non meno della zona coperta dall'interfaccia della piattaforma (+ un po' d'aria)."""
+    top, bottom = (list(safe or []) + [0.0, 0.0])[:2]
+    if st.position == "bottom" and bottom:
+        return max(st.margin, bottom + 0.02)
+    if st.position == "top" and top:
+        return max(st.margin, top + 0.02)
+    return st.margin
+
+
+def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list | tuple | None = None) -> Element:
     wrapped = wrap_text(st, text, W, H)
     n = wrapped.count("\n") + 1
-    y = {"bottom": 1 - st.margin, "top": st.margin, "middle": 0.5}.get(st.position, 1 - st.margin)
+    margin = effective_margin(st, safe)
+    y = {"bottom": 1 - margin, "top": margin, "middle": 0.5}.get(st.position, 1 - margin)
     h_frac = st.size * 1.25 * n
     if st.position == "bottom":
         y -= h_frac / 2
