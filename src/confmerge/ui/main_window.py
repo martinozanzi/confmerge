@@ -1,16 +1,20 @@
 """Finestra principale: intestazione (titolo, profilo, modalità, tema) e due viste sullo stesso progetto."""
 from __future__ import annotations
 
+import os
+import time
 from pathlib import Path
 
+from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QStackedWidget,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox, QSizePolicy,
+                               QStackedWidget, QVBoxLayout, QWidget)
 
 from .. import paths
 from ..project import Project
 from .about import AboutDialog
 from .advanced import AdvancedShell
+from .history_dialog import HistoryDialog
 from .brand import app_icon, logo_pixmap
 from .settings_dialog import SettingsDialog, ShortcutsDialog
 from .simple import SimpleShell
@@ -18,6 +22,34 @@ from .state import AppState
 from .theme import S1, S2, S3, theme
 from .widgets import IconButton, Segmented, label, toast
 from .widgets.anim import fade_in
+
+
+AUTOSAVE_MS = 30_000
+
+
+class ElidedLabel(QLabel):
+    """Etichetta che accorcia il testo con «…» quando lo spazio non basta (non allarga mai l'intestazione)."""
+
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(parent)
+        self._full = ""
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.setText(text)
+
+    def setText(self, text: str) -> None:
+        self._full = text
+        self.setToolTip(text)
+        self._elide()
+
+    def _elide(self) -> None:
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideRight, max(self.width(), 20)))
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._elide()
+
+    def minimumSizeHint(self):
+        return QSize(40, super().minimumSizeHint().height())
 
 
 class MainWindow(QMainWindow):
@@ -61,6 +93,14 @@ class MainWindow(QMainWindow):
         self.set_mode(theme.prefs.get("mode", "simple"), animate=False, remember=False)
         self._fill_profiles()
         self._theme_icon()
+        st.spec_changed.connect(self._history_buttons)
+        st.profile_changed.connect(self._history_buttons)
+        self._history_buttons()
+        self._autosave_timer = QTimer(self)             # salvataggio automatico ogni 30 secondi
+        self._autosave_timer.setInterval(AUTOSAVE_MS)
+        self._autosave_timer.timeout.connect(self._autosave)
+        self._autosave_timer.start()
+        self._recovery_checked = False
 
     # ------------------------------------------------------------------ intestazione
     def _header(self) -> QWidget:
@@ -73,12 +113,21 @@ class MainWindow(QMainWindow):
         logo.setPixmap(logo_pixmap(28))
         row.addWidget(logo)
         row.addWidget(label("ConfMerge", "h2"))
-        self.project_lbl = label("Nessun progetto", "muted")
-        row.addWidget(self.project_lbl)
-        row.addStretch(1)
+        self.project_lbl = ElidedLabel("Nessun progetto")
+        self.project_lbl.setProperty("role", "muted")
+        row.addWidget(self.project_lbl, 1)
+        self.back_btn = IconButton("undo-2", "Indietro: annulla l'ultima modifica (Ctrl+Z)")
+        self.fwd_btn = IconButton("redo-2", "Avanti: ripristina la modifica annullata (Ctrl+Maiusc+Z)")
+        self.hist_btn = IconButton("clock", "Cronologia delle modifiche: torna a un punto qualsiasi")
+        self.back_btn.clicked.connect(self._undo)
+        self.fwd_btn.clicked.connect(self._redo)
+        self.hist_btn.clicked.connect(self.history_dialog)
+        for b in (self.back_btn, self.fwd_btn, self.hist_btn):
+            row.addWidget(b)
+        row.addSpacing(S2)
         row.addWidget(label("Profilo:", "muted"))
         self.profile_box = QComboBox()
-        self.profile_box.setMinimumWidth(190)
+        self.profile_box.setMinimumWidth(150)
         self.profile_box.setToolTip("Il profilo decide titolo, logo, scritte e credito")
         self.profile_box.currentTextChanged.connect(self._profile_picked)
         row.addWidget(self.profile_box)
@@ -115,8 +164,16 @@ class MainWindow(QMainWindow):
         self.theme_btn.set_icon("sun" if theme.t.name == "dark" else "moon")
 
     def _project_changed(self):
-        pr = self.state.project
-        self.project_lbl.setText("·  " + (Path(pr.clips[0]).parent.name or "Nuovo progetto") if pr else "Nessun progetto")
+        st = self.state
+        pr = st.project
+        if not pr:
+            self._saved_note = ""
+            self.project_lbl.setText("Nessun progetto")
+            return
+        name = st.project_path.stem if st.project_path else (Path(pr.clips[0]).parent.name or "Nuovo progetto")
+        note = getattr(self, "_saved_note", "")
+        self.project_lbl.setText(f"·  {name}" + (f"  ({note})" if note else ""))
+        self.setWindowTitle(f"{name} – ConfMerge")
 
     # ------------------------------------------------------------------ modalità
     def set_mode(self, mode: str, animate: bool = True, remember: bool = True) -> None:
@@ -193,6 +250,13 @@ class MainWindow(QMainWindow):
         for act, name in self._menu_icons:
             act.setIcon(theme.icon(name, theme.t.text2))
 
+    def _history_buttons(self):
+        self.back_btn.setEnabled(self.state.can_undo)
+        self.fwd_btn.setEnabled(self.state.can_redo)
+
+    def history_dialog(self):
+        HistoryDialog(self.state, self).exec()
+
     def _undo(self):
         if not self.state.undo():
             toast(self, "Non c'è niente da annullare.", "info")
@@ -215,26 +279,63 @@ class MainWindow(QMainWindow):
         SettingsDialog(self.state, self).exec()
 
     # ------------------------------------------------------------------ progetto
+    def confirm_discard(self) -> bool:
+        """True se si può chiudere/sostituire il lavoro: già salvato, oppure l'utente ha scelto cosa farne."""
+        from ..autosave import clear_recovery
+        st = self.state
+        if os.environ.get("CONFMERGE_NO_CONFIRM") or not st.project or not st.is_dirty():
+            return True
+        if st.project_path is not None and st.settings.data.get("autosave_named", True):
+            st.autosave()                                # progetto con nome: il salvataggio automatico basta
+            return True
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Lavoro non salvato")
+        box.setText("Hai modifiche non salvate.")
+        box.setInformativeText("Vuoi salvare il progetto prima di continuare? Se non lo salvi, il lavoro andrà perso.")
+        save = box.addButton("Salva…", QMessageBox.AcceptRole)
+        drop = box.addButton("Non salvare", QMessageBox.DestructiveRole)
+        box.addButton("Annulla", QMessageBox.RejectRole)
+        box.setDefaultButton(save)
+        box.exec()
+        if box.clickedButton() is save:
+            return self.save_project()
+        if box.clickedButton() is drop:
+            clear_recovery(st.settings.root)
+            return True
+        return False
+
     def new(self):
+        if not self.confirm_discard():
+            return
         st = self.state
         st.project = None
+        st.project_path = None
         st.sources.clear()
         self.simple.reset()
         self.adv.goto(0, animate=False)
+        st.reset_history()
+        st.mark_clean()
         self._project_changed()
 
-    def save_project(self):
-        if not self.state.project:
+    def save_project(self) -> bool:
+        st = self.state
+        if not st.project:
             QMessageBox.information(self, "ConfMerge", "Non c'è ancora niente da salvare: prima scegli una cartella e lascia finire l'analisi.")
-            return
-        f, _ = QFileDialog.getSaveFileName(self, "Salva il progetto", "", "Progetto ConfMerge (*.confmerge)")
-        if f:
-            self.state.sync_spec_to_project()
-            self.state.project.save(f if f.endswith(".confmerge") else f + ".confmerge")
-            toast(self, "Progetto salvato.", "ok")
+            return False
+        start = str(st.project_path) if st.project_path else ""
+        f, _ = QFileDialog.getSaveFileName(self, "Salva il progetto", start, "Progetto ConfMerge (*.confmerge)")
+        if not f:
+            return False
+        st.save_to(f if f.endswith(".confmerge") else f + ".confmerge")
+        self._project_changed()
+        toast(self, "Progetto salvato.", "ok")
+        return True
 
-    def open_project(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Apri un progetto", "", "Progetto ConfMerge (*.confmerge)")
+    def open_project(self, path: str = "", recovery: bool = False):
+        if not self.confirm_discard():
+            return
+        f = path or QFileDialog.getOpenFileName(self, "Apri un progetto", "", "Progetto ConfMerge (*.confmerge)")[0]
         if not f:
             return
         try:
@@ -242,6 +343,7 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as e:
             QMessageBox.warning(self, "ConfMerge", f"Questo file non sembra un progetto valido: {e}")
             return
+        self._opening = (None if recovery else Path(f), recovery)
         runner = self.state.analysis
         runner.finished.connect(self._opened)
         runner.failed.connect(lambda m: QMessageBox.critical(self, "ConfMerge", m))
@@ -254,12 +356,58 @@ class MainWindow(QMainWindow):
             self.state.analysis.finished.disconnect(self._opened)
         except (TypeError, RuntimeError):
             pass
+        path, recovery = getattr(self, "_opening", (None, False))
+        self.state.project_path = path
+        if recovery:
+            self.state._clean_fp = ""                     # il lavoro recuperato non è ancora salvato: resta «da salvare»
+        self._project_changed()
         if self.mode == "advanced":
             self.adv.goto(1)
         else:
             self.simple.show_step(1)
 
+    def _autosave(self):
+        st = self.state
+        if st.analysis.running or not st.project:
+            return
+        kind = st.autosave()
+        if kind:
+            hhmm = time.strftime("%H:%M")
+            self._saved_note = f"salvato automaticamente alle {hhmm}" if kind == "file" else f"copia di sicurezza alle {hhmm}"
+            self._project_changed()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        if not self._recovery_checked:
+            self._recovery_checked = True
+            QTimer.singleShot(600, self._offer_recovery)
+
+    def _offer_recovery(self):
+        from ..autosave import clear_recovery, has_recovery, recovery_file, recovery_info
+        root = self.state.settings.root
+        if os.environ.get("CONFMERGE_NO_RECOVERY") or self.state.project or not has_recovery(root):
+            return
+        info = recovery_info(root)
+        when = time.strftime("%d/%m/%Y alle %H:%M", time.localtime(info["saved_at"])) if info.get("saved_at") else "una volta"
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Question)
+        box.setWindowTitle("Lavoro non salvato")
+        box.setText("Ho trovato un lavoro non salvato.")
+        box.setInformativeText(f"L'ultima copia di sicurezza è del {when}. Vuoi riprenderlo?")
+        yes = box.addButton("Riprendi il lavoro", QMessageBox.AcceptRole)
+        no = box.addButton("Scarta", QMessageBox.DestructiveRole)
+        box.setDefaultButton(yes)
+        box.exec()
+        if box.clickedButton() is yes:
+            self.open_project(str(recovery_file(root)), recovery=True)
+        elif box.clickedButton() is no:
+            clear_recovery(root)
+
     def closeEvent(self, e):
+        if not self.confirm_discard():
+            e.ignore()
+            return
+        self._autosave_timer.stop()
         self.state.settings.save()
         for p in (self.simple.check.player.player, self.adv.review.player.player):
             p.stop()

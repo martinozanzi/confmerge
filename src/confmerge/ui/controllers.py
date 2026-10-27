@@ -243,7 +243,10 @@ class AnalysisRunner(QObject):
             st.spec.slides.files = [str(s) for s in slides]
             st.spec.slides.enabled = True
         st.spec.image.kb_t1 = min(st.spec.image.kb_t1, rep.project.total_duration)
+        st.project_path = None
         st.project_changed.emit()
+        st.reset_history()
+        st.mark_clean()
         self.finished.emit()
 
 
