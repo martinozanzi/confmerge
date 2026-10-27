@@ -19,6 +19,7 @@ from .widgets import Badge, GhostButton, IconButton, PrimaryButton, SecondaryBut
 from .canvas import Canvas
 from .element_editor import ElementEditor
 from .player import fmt
+from .subtitles_tab import SubtitlesTab
 from .titles_tabs import TemplateTab, TransitionsTab
 
 
@@ -54,18 +55,23 @@ class ProfileBar(QWidget):
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.state = state
-        row = QHBoxLayout(self)
-        row.setContentsMargins(0, 0, 0, 0)
+        col = QVBoxLayout(self)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(8)
+        row = QHBoxLayout()
         row.addWidget(QLabel("Profilo:"))
         self.combo = QComboBox()
         self.combo.setMinimumWidth(180)
-        row.addWidget(self.combo)
+        row.addWidget(self.combo, 1)
+        col.addLayout(row)
+        row = QHBoxLayout()                    # i pulsanti su una seconda riga: la barra non allarga mai la finestra
         for text, fn in (("Applica", self.apply), ("💾 Salva come profilo…", self.save_as), ("Duplica…", self.dup),
                          ("Elimina", self.delete), ("Importa…", self.imp), ("Esporta…", self.exp)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             row.addWidget(b)
         row.addStretch(1)
+        col.addLayout(row)
         state.profile_changed.connect(self.refresh)
         self.refresh()
 
@@ -742,7 +748,7 @@ def apply_search(root: QWidget, query: str) -> int:
 
 
 TAB_TITLES = {"image": "Formato", "overlay": "Elementi", "title": "Titolo iniziale", "outro": "Schermata finale",
-              "lt": "Nome relatore", "caption": "Scritte", "trans": "Transizioni", "slides": "Slide e PiP", "credit": "Credito"}
+              "lt": "Nome relatore", "caption": "Scritte", "subs": "Sottotitoli", "trans": "Transizioni", "slides": "Slide e PiP", "credit": "Credito"}
 
 
 class GraphicsPage(QWidget):
@@ -828,6 +834,8 @@ class GraphicsPage(QWidget):
                 tt = TemplateTab(state, self, "caption")
                 tt.goDecorations.connect(lambda: self.goPhase.emit("decorations"))
                 self.tabs.addTab(scrolled(tt), TAB_TITLES[k])
+            elif k == "subs":
+                self.tabs.addTab(scrolled(SubtitlesTab(state, self)), TAB_TITLES[k])
             elif k == "trans":
                 self.tabs.addTab(scrolled(TransitionsTab(state, self)), TAB_TITLES[k])
             elif k == "slides":

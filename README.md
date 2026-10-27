@@ -25,6 +25,13 @@ mini-timeline, annulla/ripristina, coda di export, parametri tecnici in «Avanza
 Scorciatoie (elenco completo con F1): `Spazio`/`K` riproduci, `←/→` fotogramma, `Maiusc+←/→` 1 s, `J`/`L` 5 s, `I`/`O` inizio/fine,
 `N` cambio slide, `Ctrl+Z` / `Ctrl+Maiusc+Z` annulla/ripristina.
 
+**Sottotitoli e musica** (in Semplice nel passo «Esporta», in Avanzata in «Titoli e sottotitoli» e «Audio»):
+- *Sottotitoli automatici*: la trascrizione usa il servizio a consumo di **Groq** (circa 4 centesimi di dollaro per ora di video).
+  Serve una chiave gratuita da incollare in **Impostazioni → Sottotitoli automatici** ([istruzioni](docs/GROQ.md)). L'audio viene
+  inviato a Groq solo quando premi «Crea i sottotitoli»; la chiave resta sul tuo computer (su Windows cifrata) e non finisce nei
+  profili. Puoi correggere ogni riga, scegliere lo stile (carattere, colori, bordo, sfondo, posizione) ed esportare il file `.srt`.
+- *Musica di sottofondo*: un brano a tua scelta, con volume e abbassamento automatico quando qualcuno parla.
+
 Il tema è scuro, chiaro o «come il computer» (Impostazioni); «Riduci le animazioni» le disattiva.
 
 Impostazioni e profili: `%APPDATA%\ConfMerge`.

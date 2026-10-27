@@ -135,3 +135,107 @@ def test_transitions_all_export(qapp, project, tmp_path):
         assert abs(dur - (2.0 + 28.0 + 2.0 - 2 * f)) < 0.6, (t.id, dur)
         if base is None:
             base = dur
+
+
+def test_subtitles_burned_in(qapp, project, tmp_path):
+    """Le righe finiscono nel video: il fotogramma con il sottotitolo ha pixel chiari in basso che senza non ci sono."""
+    from confmerge.spec import SubLine
+    d, rep = project
+    base = RenderSpec()
+    base.credit.enabled = False
+    base.export.encoder, base.export.preset, base.export.custom_height = "libx264", "Personalizzato", 360
+    base.export.bitrate_mbps = 1.0
+    spec = RenderSpec.from_dict(base.to_dict())
+    spec.subtitles.enabled = True
+    spec.subtitles.lines = [SubLine(7.0, 9.0, "Questo è un sottotitolo di prova abbastanza lungo da andare a capo sul video"),
+                            SubLine(500.0, 502.0, "fuori intervallo")]
+    outs = {}
+    for name, sp in (("no", base), ("si", spec)):
+        out = tmp_path / f"{name}.mp4"
+        ee.run_export(rep.project, rep.clips, sp, out, 5.0, 15.0, lambda f, s: None)
+        png = tmp_path / f"{name}.png"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", "3", "-i", str(out), "-frames:v", "1", str(png)], check=True)
+        outs[name] = png
+    from PySide6.QtGui import QImage
+    a, b = QImage(str(outs["no"])), QImage(str(outs["si"]))
+    assert a.size() == b.size()
+    diff = sum(1 for y in range(int(b.height() * 0.7), b.height()) for x in range(0, b.width(), 2)
+               if a.pixelColor(x, y) != b.pixelColor(x, y))
+    top = sum(1 for y in range(0, int(b.height() * 0.5)) for x in range(0, b.width(), 2)
+              if a.pixelColor(x, y) != b.pixelColor(x, y))
+    assert diff > 1000 and top < diff / 10, (diff, top)      # il resto cambia solo per il rumore di codifica
+
+
+def test_background_music_with_ducking(qapp, project, tmp_path):
+    d, rep = project
+    music = tmp_path / "m.wav"
+    sr = 22050
+    t = np.arange(sr * 3) / sr
+    wavfile.write(str(music), sr, (np.sin(2 * np.pi * 440 * t) * 0.5 * 32767).astype("<i2"))   # più corta del video: va in loop
+    rms = {}
+    for name, (use, duck) in {"no": (False, False), "mix": (True, False), "duck": (True, True)}.items():
+        spec = RenderSpec()
+        spec.credit.enabled = False
+        spec.export.encoder, spec.export.preset, spec.export.custom_height = "libx264", "Personalizzato", 360
+        spec.export.bitrate_mbps = 1.0
+        spec.audio.loudnorm = False
+        if use:
+            spec.audio.music_path, spec.audio.music_duck, spec.audio.music_db = str(music), duck, -6.0
+        out = tmp_path / f"{name}.mp4"
+        ee.run_export(rep.project, rep.clips, spec, out, 5.0, 17.0, lambda f, s: None)
+        assert abs(float(probe(out)["format"]["duration"]) - 12.0) < 0.5
+        wav = tmp_path / f"{name}.wav"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(out), "-vn", "-ac", "1", "-ar", "16000", str(wav)], check=True)
+        _, x = wavfile.read(str(wav))
+        rms[name] = float(np.sqrt(np.mean((x.astype(np.float64) / 32768) ** 2)))
+    assert rms["mix"] > rms["no"] * 1.05              # la musica si sente
+    assert rms["duck"] < rms["mix"]                   # e con l'abbassamento è più bassa del mix semplice
+
+
+def test_subtitle_controller_end_to_end(qapp, project, tmp_path, monkeypatch):
+    """Cartella → audio del video finale → (finto) Groq → righe nello spec, con i tempi sulla linea del progetto."""
+    import threading, time
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json as _json
+    from PySide6.QtWidgets import QApplication
+    from confmerge.settings import Settings
+    from confmerge.ui.state import AppState
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            raw = _json.dumps({"segments": [{"start": 1.0, "end": 3.0, "text": " ciao a tutti", "no_speech_prob": 0}],
+                               "words": [{"word": "ciao", "start": 1.0, "end": 1.5}, {"word": "a", "start": 1.5, "end": 1.7},
+                                         {"word": "tutti", "start": 1.7, "end": 3.0}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    srv = HTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    monkeypatch.setenv("CONFMERGE_GROQ_URL", f"http://127.0.0.1:{srv.server_port}")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    d, rep = project
+    st = AppState(Settings(tmp_path / "cfg"))
+    st.project, st.clips = rep.project, rep.clips
+    st.project.trim_start, st.project.trim_end = 5.0, 25.0
+    ctl = st.subtitles
+    assert "chiave" in ctl.blocker()
+    st.settings.keys.set("groq", "good")
+    done = []
+    ctl.finished.connect(done.append)
+    ctl.failed.connect(lambda m: done.append(m))
+    ctl.start()
+    t0 = time.time()
+    while not done and time.time() - t0 < 60:
+        QApplication.processEvents()
+        time.sleep(0.02)
+    srv.shutdown()
+    assert done and isinstance(done[0], int), done
+    sub = st.spec.subtitles
+    assert sub.enabled and sub.lines and sub.lines[0].text.startswith("ciao a tutti")
+    assert abs(sub.lines[0].start - 6.0) < 0.1 and sub.range_start == 5.0 and sub.range_end == 25.0   # 1 s del video + 5 s di inizio

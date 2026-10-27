@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
-from . import audio_fx, credit, encoders, paths, slides as sl, transitions
+from . import audio_fx, credit, encoders, paths, slides as sl, subtitles, transitions
 from .ffmpeg_wrapper import FFmpegError
 from .media_scan import MediaInfo
 from .pipeline import audio_filter, plan_segments
@@ -123,6 +123,33 @@ def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: fl
     return ",".join(ch)
 
 
+def _fpath(p: Path) -> str:
+    """Percorso dentro un filtro ffmpeg: barre dritte e due punti protetti (C\\:/...)."""
+    return str(p).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
+
+
+def _mix_music(g, spec: RenderSpec, D: float, music: str) -> None:
+    """Musica di sottofondo sotto il video principale, con abbassamento automatico quando c'è voce ([vox] → [amain])."""
+    au = spec.audio
+    m = g.inp("-stream_loop", "-1", "-i", music)
+    fade = max(0.0, min(au.music_fade, D / 3))
+    chain = [f"atrim=end={D + 1:.3f}", "asetpts=PTS-STARTPTS", "aformat=sample_rates=48000:channel_layouts=stereo",
+             "loudnorm=I=-16:TP=-2:LRA=11", "aformat=sample_rates=48000:channel_layouts=stereo",
+             f"volume={au.music_db:.1f}dB", f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS"]
+    if fade > 0:
+        chain += [f"afade=t=in:st=0:d={fade:.2f}", f"afade=t=out:st={max(0.0, D - fade):.3f}:d={fade:.2f}"]
+    if au.music_duck:
+        depth = max(1.0, abs(au.music_duck_db))                 # dB da togliere mentre si parla (stima: dipende dal volume della voce)
+        ratio = min(20.0, max(1.5, 1.0 / max(0.05, 1.0 - depth / 20.0)))
+        g.f.append("[vox]asplit=2[vmix][vsc]")
+        g.f.append(f"[{m}:a:0]{','.join(chain)}[mus]")
+        g.f.append(f"[mus][vsc]sidechaincompress=threshold=0.02:ratio={ratio:.2f}:attack=40:release=700:makeup=1[musd]")
+        g.f.append("[vmix][musd]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[amain]")
+    else:
+        g.f.append(f"[{m}:a:0]{','.join(chain)}[mus]")
+        g.f.append("[vox][mus]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[amain]")
+
+
 def _fade_of(scene: Scene) -> float:
     """Durata della transizione di una scena; «taglio netto» = nessuna sovrapposizione."""
     return 0.0 if scene.transition == "cut" else scene.fade
@@ -215,6 +242,15 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     frames += sum(l.frames for l in layers)
     cur = add_layers(g, cur, layers)
 
+    # --- 3b. sottotitoli (libass), sopra tutto il resto del video principale
+    sub = spec.subtitles
+    fonts = Path(__file__).resolve().parent / "resources" / "fonts"
+    if sub.enabled and subtitles.write_ass(sub, t0, t1, W, H, workdir / "subs.ass", fonts):
+        g.f.append(f"[{cur}]ass=filename='{_fpath(workdir / 'subs.ass')}':fontsdir='{_fpath(fonts)}'[vsub]")
+        cur = "vsub"
+    elif sub.enabled:
+        notes.append("Sottotitoli attivi ma nessuna riga nell'intervallo scelto: non vengono aggiunti.")
+
     # --- 4. fade del video principale
     chain = []
     if im.fade_in > 0:
@@ -235,7 +271,12 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         achain.append(f"afade=t=in:st=0:d={im.fade_in:.3f}")
     if im.fade_out > 0:
         achain.append(f"afade=t=out:st={max(0, D - im.fade_out):.3f}:d={im.fade_out:.3f}")
-    g.f.append(f"[{a_in}:a:0]{','.join(achain)}[amain]")
+    music = spec.audio.music_path
+    if music and Path(music).exists():
+        g.f.append(f"[{a_in}:a:0]{','.join(achain)}[vox]")
+        _mix_music(g, spec, D, music)
+    else:
+        g.f.append(f"[{a_in}:a:0]{','.join(achain)}[amain]")
 
     # --- 6. scene (titolo, outro, credito)
     seq: list[tuple[str, str, float, float, str]] = []   # (video, audio, durata, durata transizione dalla precedente, effetto)

@@ -652,3 +652,92 @@ class ExportController(QObject):
             subprocess.Popen(["shutdown", "/s", "/t", "30"])
         elif action == "sleep":
             subprocess.Popen(["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"])
+
+
+class SubtitleController(QObject):
+    """Crea i sottotitoli: estrae l'audio del video finale, lo trascrive con Groq e raggruppa le parole in righe."""
+    progress = Signal(float, str)
+    finished = Signal(int)               # numero di righe create
+    failed = Signal(str)
+    cancelled = Signal()
+
+    def __init__(self, state):
+        super().__init__()
+        self.state = state
+        self.worker: Worker | None = None
+
+    @property
+    def running(self) -> bool:
+        return bool(self.worker and self.worker.isRunning())
+
+    def has_key(self) -> bool:
+        return self.state.settings.keys.has("groq")
+
+    def seconds(self) -> float:
+        st = self.state
+        return max(0.0, st.trim_end - st.trim_start) if st.project else 0.0
+
+    def cost_text(self) -> str:
+        from .. import transcribe
+        usd = transcribe.estimate_cost(self.seconds())
+        return "meno di 1 centesimo di dollaro" if usd < 0.01 else f"circa {usd * 100:.0f} centesimi di dollaro"
+
+    def blocker(self) -> str:
+        """Perché non si può partire (vuoto = si può)."""
+        if not self.state.project:
+            return "Prima apri una cartella di video."
+        if not self.has_key():
+            return "Manca la chiave di Groq: inseriscila in Impostazioni → Sottotitoli automatici."
+        return ""
+
+    def _vocabulary(self) -> str:
+        names = [t for t in (self.state.spec.variables.get("relatore", ""), self.state.spec.variables.get("titolo", ""))]
+        names += [lt.name for lt in self.state.spec.graphics.lower_thirds]
+        return ", ".join(n for n in dict.fromkeys(names) if n and "{" not in n and n != "Nome Cognome")
+
+    def start(self) -> None:
+        from .. import pipeline as pl, transcribe
+        from ..ffmpeg_wrapper import run_ffmpeg
+        why = self.blocker()
+        if why:
+            self.failed.emit(why)
+            return
+        st = self.state
+        p, t0, t1 = st.project, st.trim_start, st.trim_end
+        key = st.settings.keys.get("groq")
+        max_chars = st.spec.subtitles.max_chars
+        vocab = self._vocabulary()
+        D = t1 - t0
+
+        def job(cancel, report):
+            work = paths.temp_dir() / "subs"
+            work.mkdir(parents=True, exist_ok=True)
+            wav = work / "audio.wav"
+            report(0.02, "Preparo l'audio…")
+            chain = ",".join([pl.audio_filter(p, t0), f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS",
+                              "aformat=sample_rates=16000:channel_layouts=mono"])
+            run_ffmpeg(["-i", str(p.audio), "-vn", "-af", chain, "-c:a", "pcm_s16le", str(wav)], cancel=cancel)
+            words = transcribe.transcribe_wav(wav, key, work, "it", vocab,
+                                              lambda f, m: report(0.05 + 0.9 * f, m), cancel)
+            return transcribe.build_lines(words, max_chars=max_chars), t0, t1
+
+        self.worker = Worker(job)
+        self.worker.progress.connect(self.progress)
+        self.worker.finished_ok.connect(self._ok)
+        self.worker.failed.connect(self.failed)
+        self.worker.cancelled.connect(self.cancelled)
+        self.worker.start()
+
+    def cancel(self) -> None:
+        if self.worker:
+            self.worker.cancel()
+
+    def _ok(self, res) -> None:
+        from ..spec import SubLine
+        lines, t0, t1 = res
+        sub = self.state.spec.subtitles
+        sub.lines = [SubLine(round(ln.start + t0, 2), round(ln.end + t0, 2), ln.text) for ln in lines]
+        sub.range_start, sub.range_end = t0, t1
+        sub.enabled = bool(sub.lines)
+        self.state.touch()
+        self.finished.emit(len(sub.lines))
