@@ -40,7 +40,7 @@ CHANGE_LABELS = {
     ("spec", "image"): "Formato e ritaglio", ("spec", "slides"): "Slide e PiP", ("spec", "credit"): "Credito",
     ("spec", "export"): "Esportazione", ("spec", "variables"): "Testi del video",
     ("project", "trim_start"): "Inizio e fine del video", ("project", "trim_end"): "Inizio e fine del video",
-    ("project", "trim_confirmed"): "Inizio e fine del video",
+    ("project", "trim_confirmed"): "Inizio e fine del video", ("project", "keep"): "Tagli",
 }
 
 
@@ -87,8 +87,11 @@ class AppState(QObject):
     project_changed = Signal()    # nuovo progetto / offset / trim
     profile_changed = Signal()    # profilo applicato o annullamento: le viste si ricostruiscono
 
-    def __init__(self, settings: Settings | None = None):
+    cuts_changed = Signal()       # Studio Social: cambiati gli intervalli tenuti (tagli, annulla/ripristina)
+
+    def __init__(self, settings: Settings | None = None, kind: str = "merge"):
         super().__init__()
+        self.kind = kind              # merge = Merge Conferenze · social = Studio Social
         self.settings = settings or Settings()
         from .theme import theme
         theme.prefs.data = self.settings.data.setdefault("ui", {})
@@ -113,10 +116,17 @@ class AppState(QObject):
         self.review = ReviewController(self)
         self.export = ExportController(self)
         self.subtitles = SubtitleController(self)
+        from .social_controller import SocialController
+        self.social = SocialController(self)
         # profilo e annulla/ripristina
-        self.settings.ensure_starter_profile()
-        self.profile_name = self.settings.data.get("current_profile", "Predefinito")
-        self.apply_profile(self.profile_name, emit=False)
+        if kind == "social":
+            self.profile_name = "Social"                 # niente profili del merge: partenza pulita, senza titolo né credito
+            self.spec.credit.enabled = False
+            self.spec.audio.loudnorm = True
+        else:
+            self.settings.ensure_starter_profile()
+            self.profile_name = self.settings.data.get("current_profile", "Predefinito")
+            self.apply_profile(self.profile_name, emit=False)
         self._undo_timer = QTimer(self)
         self._undo_timer.setSingleShot(True)
         self._undo_timer.setInterval(450)
@@ -142,6 +152,11 @@ class AppState(QObject):
         if not self.project:
             return 0.0
         return self.project.trim_end if self.project.trim_end is not None else self.project.total_duration
+
+    def ranges(self) -> list[tuple[float, float]]:
+        """Intervalli del video finito (sul tempo del progetto): uno solo nel merge, quelli tenuti nel social."""
+        from .. import edl
+        return edl.ranges_for(self.project, self.trim_start, self.trim_end) if self.project else []
 
     def to_out(self, pos: float) -> float:
         return pos - self.trim_start
@@ -188,7 +203,8 @@ class AppState(QObject):
         data = {"spec": self.spec.to_dict()}
         pr = self.project
         if pr is not None:
-            data["project"] = {"trim_start": pr.trim_start, "trim_end": pr.trim_end, "trim_confirmed": pr.trim_confirmed}
+            data["project"] = {"trim_start": pr.trim_start, "trim_end": pr.trim_end, "trim_confirmed": pr.trim_confirmed,
+                               "keep": pr.keep}
         return json.dumps(data, sort_keys=True)
 
     def reset_history(self) -> None:
@@ -256,18 +272,27 @@ class AppState(QObject):
             data = json.loads(dump)
             _assign(self.spec, RenderSpec.from_dict(data["spec"]))
             pr, saved = self.project, data.get("project")
-            trim_changed = False
+            trim_changed = cuts_changed = False
             if pr is not None and saved:
                 new = (saved["trim_start"], saved["trim_end"], saved["trim_confirmed"])
                 trim_changed = (pr.trim_start, pr.trim_end, pr.trim_confirmed) != new
                 pr.trim_start, pr.trim_end, pr.trim_confirmed = new
+                keep = [list(x) for x in saved.get("keep", [])]
+                cuts_changed = pr.keep != keep
+                pr.keep = keep
             self._cur = dump
             self.profile_changed.emit()       # le viste si ricostruiscono dai nuovi valori
             if trim_changed:
                 self.review.trimChanged.emit()
+            if cuts_changed:
+                self.cuts_changed.emit()
             self.spec_changed.emit()
         finally:
             self._restoring = False
+
+    @property
+    def slot(self) -> str:
+        return "social" if self.kind == "social" else ""
 
     # --- file di progetto: nome, «non salvato», salvataggio automatico
     def fingerprint(self) -> str:
@@ -289,7 +314,7 @@ class AppState(QObject):
         self.project.save(path)
         self.project_path = Path(path)
         self.mark_clean()
-        clear_recovery(self.settings.root)
+        clear_recovery(self.settings.root, self.slot)
 
     def autosave(self) -> str:
         """Salva in silenzio se c'è qualcosa di nuovo. Restituisce «file», «recupero» o «» (niente da fare)."""
@@ -304,7 +329,7 @@ class AppState(QObject):
                 self.project.save(self.project_path)
                 self._clean_fp = self._autosaved_fp = fp
                 return "file"
-            write_recovery(self.project, self.settings.root, self.project_path.name if self.project_path else "")
+            write_recovery(self.project, self.settings.root, self.project_path.name if self.project_path else "", self.slot)
         except OSError:
             return ""
         self._autosaved_fp = fp

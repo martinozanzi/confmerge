@@ -14,6 +14,7 @@ import time
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("CONFMERGE_NO_CONFIRM", "1")
 os.environ.setdefault("CONFMERGE_NO_RECOVERY", "1")
+os.environ.setdefault("CONFMERGE_APP", "merge")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))
@@ -89,6 +90,8 @@ def pump(app, n=15, dt=0.03):
 
 
 def main():
+    import faulthandler
+    faulthandler.dump_traceback_later(240, exit=True)       # se qualcosa si blocca, si esce con la traccia invece di restare fermi
     args = sys.argv[1:]
     outdir = pathlib.Path(args[0])
     outdir.mkdir(parents=True, exist_ok=True)
@@ -108,7 +111,8 @@ def main():
     media = pathlib.Path(tempfile.gettempdir()) / "confmerge-shots-media"
     media.mkdir(exist_ok=True)
     make_media(media)
-    w = MainWindow(st)
+    sst = AppState(st.settings, kind="social")
+    w = MainWindow(st, sst)
     w.resize(*((1100, 700) if use_min else (1360, 860)))
     w.show()
     problems: list[dict] = []
@@ -181,9 +185,32 @@ def main():
     adv.goto(7, animate=False)
     wait(lambda: st.export.est is not None)
     snap("a7-export")
-    print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False))
-    w.close()
-    os._exit(0)
+
+    # ---------------- STUDIO SOCIAL
+    w.set_app("home", animate=False)
+    snap("h0-scelta")
+    w.set_app("social", animate=False)
+    snap("o0-video")
+    w.social.start.start([media / "v0.mp4", media / "v1.mp4"])
+    wait(lambda: sst.project is not None and w.social.step == 1)
+    pump(app, 30)
+    snap("o1-taglia")
+    sst.social.remove_silences()
+    sst.social.remove(2.0, 4.0)
+    w.social.cut.wave.sel = (6.0, 9.0)
+    w.social.cut._sel_changed((6.0, 9.0))
+    pump(app, 10)
+    snap("o1-taglia-tagliato")
+    w.social.show_step(2, animate=False)
+    sst.spec.social.platforms = ["shorts", "reels", "youtube"]
+    w.social.look.sync()
+    pump(app, 30)
+    snap("o2-aspetto")
+    w.social.show_step(3, animate=False)
+    pump(app, 10)
+    snap("o3-esporta")
+    print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False), flush=True)
+    os._exit(0)          # senza chiudere la finestra: la chiusura dei lettori multimediali può bloccarsi in modo casuale
 
 
 if __name__ == "__main__":

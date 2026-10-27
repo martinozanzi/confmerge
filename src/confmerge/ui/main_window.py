@@ -15,6 +15,8 @@ from ..project import Project
 from .about import AboutDialog
 from .advanced import AdvancedShell
 from .history_dialog import HistoryDialog
+from .home import HomePage
+from .social_shell import SocialShell
 from .brand import app_icon, logo_pixmap
 from .settings_dialog import SettingsDialog, ShortcutsDialog
 from .simple import SimpleShell
@@ -53,9 +55,10 @@ class ElidedLabel(QLabel):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, state: AppState | None = None):
+    def __init__(self, state: AppState | None = None, social_state: AppState | None = None):
         super().__init__()
         self.state = state or AppState()
+        self.social_state = social_state or AppState(self.state.settings, kind="social")      # lavoro di Studio Social
         self.setWindowTitle("ConfMerge")
         self.setWindowIcon(app_icon())
         self.resize(1280, 820)
@@ -68,6 +71,11 @@ class MainWindow(QMainWindow):
         self.shells = QStackedWidget()
         self.shells.addWidget(self.simple)
         self.shells.addWidget(self.adv)
+        self.social = SocialShell(self.social_state, self.settings_dialog)
+        self.home = HomePage()
+        self.shells.addWidget(self.social)
+        self.shells.addWidget(self.home)
+        self.app = "merge"                                  # strumento attivo: social | merge | home
 
         central = QWidget()
         central.setObjectName("Root")
@@ -82,6 +90,11 @@ class MainWindow(QMainWindow):
         self._shortcuts()
         self.simple.moreOptions.connect(lambda: self.set_mode("advanced"))
         self.simple.newProject.connect(self.new)
+        self.social.newProject.connect(self.new)
+        self.home.chosen.connect(self.set_app)
+        self.social_state.project_changed.connect(self._project_changed)
+        self.social_state.spec_changed.connect(self._history_buttons)
+        self.social_state.profile_changed.connect(self._history_buttons)
         st.project_changed.connect(self._project_changed)
         st.profile_changed.connect(self._fill_profiles)
         try:
@@ -91,6 +104,8 @@ class MainWindow(QMainWindow):
         theme.changed.connect(self._theme_icon)
         theme.changed.connect(self._refresh_menu_icons)
         self.set_mode(theme.prefs.get("mode", "simple"), animate=False, remember=False)
+        start = os.environ.get("CONFMERGE_APP") or theme.prefs.get("app", "") or "home"
+        self.set_app(start if start in ("social", "merge", "home") else "home", animate=False, remember=False)
         self._fill_profiles()
         self._theme_icon()
         st.spec_changed.connect(self._history_buttons)
@@ -125,10 +140,18 @@ class MainWindow(QMainWindow):
         for b in (self.back_btn, self.fwd_btn, self.hist_btn):
             row.addWidget(b)
         row.addSpacing(S2)
-        row.addWidget(label("Profilo:", "muted"))
+        self.app_seg = Segmented([("Social", "social"), ("Conferenze", "merge")],
+                                 icons=["scissors", "film"])
+        self.app_seg.changed.connect(self.set_app)
+        self.app_seg.setToolTip("Social: Studio Social, video pronti per le piattaforme. Conferenze: Merge Conferenze, per unire riprese e audio esterno.")
+        row.addWidget(self.app_seg)
+        row.addSpacing(S2)
+        self.profile_lbl = label("", "muted")                # segnaposto (il nome sta nel suggerimento del menu)
+        self.profile_lbl.setVisible(False)
+        row.addWidget(self.profile_lbl)
         self.profile_box = QComboBox()
         self.profile_box.setMinimumWidth(150)
-        self.profile_box.setToolTip("Il profilo decide titolo, logo, scritte e credito")
+        self.profile_box.setToolTip("Profilo: decide titolo, logo, scritte e credito")
         self.profile_box.currentTextChanged.connect(self._profile_picked)
         row.addWidget(self.profile_box)
         self.mode_seg = Segmented([("Semplice", "simple"), ("Avanzata", "advanced")], icons=["sparkles", "sliders-horizontal"])
@@ -164,11 +187,12 @@ class MainWindow(QMainWindow):
         self.theme_btn.set_icon("sun" if theme.t.name == "dark" else "moon")
 
     def _project_changed(self):
-        st = self.state
-        pr = st.project
+        st = self.active_state
+        pr = st.project if self.app != "home" else None
         if not pr:
             self._saved_note = ""
-            self.project_lbl.setText("Nessun progetto")
+            self.project_lbl.setText("Nessun progetto" if self.app != "home" else "")
+            self.setWindowTitle("ConfMerge")
             return
         name = st.project_path.stem if st.project_path else (Path(pr.clips[0]).parent.name or "Nuovo progetto")
         note = getattr(self, "_saved_note", "")
@@ -195,7 +219,37 @@ class MainWindow(QMainWindow):
 
     @property
     def mode(self) -> str:
-        return "advanced" if self.shells.currentIndex() == 1 else "simple"
+        i = self.shells.currentIndex()
+        return "advanced" if i == 1 else "simple" if i == 0 else theme.prefs.get("mode", "simple")
+
+    @property
+    def active_state(self) -> AppState:
+        return self.social_state if self.app == "social" else self.state
+
+    def set_app(self, app: str, animate: bool = True, remember: bool = True) -> None:
+        """Cambia strumento: Studio Social o Merge Conferenze (ognuno tiene il suo lavoro)."""
+        app = app if app in ("social", "merge", "home") else "home"
+        for p in (self.simple.check.player, self.adv.review.player, self.social.cut.player, self.social.look.player):
+            p.player.pause()
+        self.app = app
+        if remember and app != "home":
+            theme.prefs.set("app", app)
+        if app == "social":
+            self.shells.setCurrentIndex(2)
+        elif app == "home":
+            self.shells.setCurrentIndex(3)
+        else:
+            self.set_mode(theme.prefs.get("mode", "simple"), animate=False, remember=False)
+        merge = app == "merge"
+        for w in (self.mode_seg, self.profile_box):
+            w.setVisible(merge)
+        self.app_seg.setVisible(app != "home")
+        if app != "home":
+            self.app_seg.setValue(app)
+        if animate:
+            fade_in(self.shells.currentWidget(), slide=0)
+        self._project_changed()
+        self._history_buttons()
 
     # ------------------------------------------------------------------ menu e scorciatoie
     def _menus(self):
@@ -251,18 +305,19 @@ class MainWindow(QMainWindow):
             act.setIcon(theme.icon(name, theme.t.text2))
 
     def _history_buttons(self):
-        self.back_btn.setEnabled(self.state.can_undo)
-        self.fwd_btn.setEnabled(self.state.can_redo)
+        st = self.active_state
+        self.back_btn.setEnabled(st.can_undo and self.app != "home")
+        self.fwd_btn.setEnabled(st.can_redo and self.app != "home")
 
     def history_dialog(self):
-        HistoryDialog(self.state, self).exec()
+        HistoryDialog(self.active_state, self).exec()
 
     def _undo(self):
-        if not self.state.undo():
+        if not self.active_state.undo():
             toast(self, "Non c'è niente da annullare.", "info")
 
     def _redo(self):
-        if not self.state.redo():
+        if not self.active_state.redo():
             toast(self, "Non c'è niente da ripristinare.", "info")
 
     def _open_logs(self):
@@ -279,10 +334,20 @@ class MainWindow(QMainWindow):
         SettingsDialog(self.state, self).exec()
 
     # ------------------------------------------------------------------ progetto
-    def confirm_discard(self) -> bool:
+    def _states(self) -> list[AppState]:
+        """Gli stati dei due strumenti, quello in uso per primo."""
+        return [self.active_state] + [x for x in (self.state, self.social_state) if x is not self.active_state]
+
+    @staticmethod
+    def _tool(st: AppState) -> str:
+        return "Studio Social" if st.kind == "social" else "Merge Conferenze"
+
+    def confirm_discard(self, only: AppState | None = None) -> bool:
         """True se si può chiudere/sostituire il lavoro: già salvato, oppure l'utente ha scelto cosa farne."""
+        return all(self._confirm_one(st) for st in ([only] if only else self._states()))
+
+    def _confirm_one(self, st: AppState) -> bool:
         from ..autosave import clear_recovery
-        st = self.state
         if os.environ.get("CONFMERGE_NO_CONFIRM") or not st.project or not st.is_dirty():
             return True
         if st.project_path is not None and st.settings.data.get("autosave_named", True):
@@ -291,7 +356,7 @@ class MainWindow(QMainWindow):
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Question)
         box.setWindowTitle("Lavoro non salvato")
-        box.setText("Hai modifiche non salvate.")
+        box.setText(f"Hai modifiche non salvate in {self._tool(st)}.")
         box.setInformativeText("Vuoi salvare il progetto prima di continuare? Se non lo salvi, il lavoro andrà perso.")
         save = box.addButton("Salva…", QMessageBox.AcceptRole)
         drop = box.addButton("Non salvare", QMessageBox.DestructiveRole)
@@ -299,29 +364,32 @@ class MainWindow(QMainWindow):
         box.setDefaultButton(save)
         box.exec()
         if box.clickedButton() is save:
-            return self.save_project()
+            return self.save_project(st)
         if box.clickedButton() is drop:
-            clear_recovery(st.settings.root)
+            clear_recovery(st.settings.root, st.slot)
             return True
         return False
 
     def new(self):
-        if not self.confirm_discard():
+        st = self.active_state
+        if not self.confirm_discard(only=st):
             return
-        st = self.state
         st.project = None
         st.project_path = None
-        st.sources.clear()
-        self.simple.reset()
-        self.adv.goto(0, animate=False)
+        if st.kind == "social":
+            self.social.reset()
+        else:
+            st.sources.clear()
+            self.simple.reset()
+            self.adv.goto(0, animate=False)
         st.reset_history()
         st.mark_clean()
         self._project_changed()
 
-    def save_project(self) -> bool:
-        st = self.state
+    def save_project(self, st: AppState | None = None) -> bool:
+        st = st if isinstance(st, AppState) else self.active_state
         if not st.project:
-            QMessageBox.information(self, "ConfMerge", "Non c'è ancora niente da salvare: prima scegli una cartella e lascia finire l'analisi.")
+            QMessageBox.information(self, "ConfMerge", "Non c'è ancora niente da salvare: prima scegli i video e lascia finire la preparazione.")
             return False
         start = str(st.project_path) if st.project_path else ""
         f, _ = QFileDialog.getSaveFileName(self, "Salva il progetto", start, "Progetto ConfMerge (*.confmerge)")
@@ -333,8 +401,6 @@ class MainWindow(QMainWindow):
         return True
 
     def open_project(self, path: str = "", recovery: bool = False):
-        if not self.confirm_discard():
-            return
         f = path or QFileDialog.getOpenFileName(self, "Apri un progetto", "", "Progetto ConfMerge (*.confmerge)")[0]
         if not f:
             return
@@ -343,38 +409,49 @@ class MainWindow(QMainWindow):
         except (OSError, ValueError) as e:
             QMessageBox.warning(self, "ConfMerge", f"Questo file non sembra un progetto valido: {e}")
             return
-        self._opening = (None if recovery else Path(f), recovery)
-        runner = self.state.analysis
+        target = self.social_state if proj.kind == "social" else self.state
+        if not self.confirm_discard(only=target):
+            return
+        self._opening = (target, None if recovery else Path(f), recovery)
+        self.set_app(target.kind if target.kind == "social" else "merge")
+        runner = target.social if target.kind == "social" else target.analysis
         runner.finished.connect(self._opened)
         runner.failed.connect(lambda m: QMessageBox.critical(self, "ConfMerge", m))
-        if self.mode == "simple":
-            self.simple.start.stack.setCurrentIndex(1)
-        runner.open_project(proj)
+        if target.kind == "social":
+            self.social.start.stack.setCurrentIndex(1)
+            target.social.open_project(proj)
+        else:
+            if self.mode == "simple":
+                self.simple.start.stack.setCurrentIndex(1)
+            runner.open_project(proj)
 
     def _opened(self):
+        target, path, recovery = getattr(self, "_opening", (self.state, None, False))
+        runner = target.social if target.kind == "social" else target.analysis
         try:
-            self.state.analysis.finished.disconnect(self._opened)
+            runner.finished.disconnect(self._opened)
         except (TypeError, RuntimeError):
             pass
-        path, recovery = getattr(self, "_opening", (None, False))
-        self.state.project_path = path
+        target.project_path = path
         if recovery:
-            self.state._clean_fp = ""                     # il lavoro recuperato non è ancora salvato: resta «da salvare»
+            target._clean_fp = ""                         # il lavoro recuperato non è ancora salvato: resta «da salvare»
         self._project_changed()
+        if target.kind == "social":
+            return                                         # SocialShell passa da sola al passo «Taglia»
         if self.mode == "advanced":
             self.adv.goto(1)
         else:
             self.simple.show_step(1)
 
     def _autosave(self):
-        st = self.state
-        if st.analysis.running or not st.project:
-            return
-        kind = st.autosave()
-        if kind:
-            hhmm = time.strftime("%H:%M")
-            self._saved_note = f"salvato automaticamente alle {hhmm}" if kind == "file" else f"copia di sicurezza alle {hhmm}"
-            self._project_changed()
+        for st in (self.state, self.social_state):
+            if st.analysis.running or st.social.running or not st.project:
+                continue
+            kind = st.autosave()
+            if kind and st is self.active_state:
+                hhmm = time.strftime("%H:%M")
+                self._saved_note = f"salvato automaticamente alle {hhmm}" if kind == "file" else f"copia di sicurezza alle {hhmm}"
+                self._project_changed()
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -384,24 +461,28 @@ class MainWindow(QMainWindow):
 
     def _offer_recovery(self):
         from ..autosave import clear_recovery, has_recovery, recovery_file, recovery_info
-        root = self.state.settings.root
-        if os.environ.get("CONFMERGE_NO_RECOVERY") or self.state.project or not has_recovery(root):
+        if os.environ.get("CONFMERGE_NO_RECOVERY"):
             return
-        info = recovery_info(root)
-        when = time.strftime("%d/%m/%Y alle %H:%M", time.localtime(info["saved_at"])) if info.get("saved_at") else "una volta"
-        box = QMessageBox(self)
-        box.setIcon(QMessageBox.Question)
-        box.setWindowTitle("Lavoro non salvato")
-        box.setText("Ho trovato un lavoro non salvato.")
-        box.setInformativeText(f"L'ultima copia di sicurezza è del {when}. Vuoi riprenderlo?")
-        yes = box.addButton("Riprendi il lavoro", QMessageBox.AcceptRole)
-        no = box.addButton("Scarta", QMessageBox.DestructiveRole)
-        box.setDefaultButton(yes)
-        box.exec()
-        if box.clickedButton() is yes:
-            self.open_project(str(recovery_file(root)), recovery=True)
-        elif box.clickedButton() is no:
-            clear_recovery(root)
+        for st in (self.state, self.social_state):
+            root, slot = st.settings.root, st.slot
+            if st.project or not has_recovery(root, slot):
+                continue
+            info = recovery_info(root, slot)
+            when = time.strftime("%d/%m/%Y alle %H:%M", time.localtime(info["saved_at"])) if info.get("saved_at") else "una volta"
+            box = QMessageBox(self)
+            box.setIcon(QMessageBox.Question)
+            box.setWindowTitle("Lavoro non salvato")
+            box.setText(f"Ho trovato un lavoro non salvato in {self._tool(st)}.")
+            box.setInformativeText(f"L'ultima copia di sicurezza è del {when}. Vuoi riprenderlo?")
+            yes = box.addButton("Riprendi il lavoro", QMessageBox.AcceptRole)
+            no = box.addButton("Scarta", QMessageBox.DestructiveRole)
+            box.setDefaultButton(yes)
+            box.exec()
+            if box.clickedButton() is yes:
+                self.open_project(str(recovery_file(root, slot)), recovery=True)
+                return
+            if box.clickedButton() is no:
+                clear_recovery(root, slot)
 
     def closeEvent(self, e):
         if not self.confirm_discard():
@@ -409,7 +490,7 @@ class MainWindow(QMainWindow):
             return
         self._autosave_timer.stop()
         self.state.settings.save()
-        for p in (self.simple.check.player.player, self.adv.review.player.player):
-            p.stop()
+        for p in (self.simple.check.player, self.adv.review.player, self.social.cut.player, self.social.look.player):
+            p.player.stop()
         paths.cleanup_temp()
         super().closeEvent(e)

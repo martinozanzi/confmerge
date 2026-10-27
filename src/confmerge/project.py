@@ -28,6 +28,8 @@ class Project:
     spec: dict = field(default_factory=dict)             # RenderSpec serializzata (grafica, slide, immagine…)
     thumbnail: dict = field(default_factory=dict)
     profile_name: str = ""
+    kind: str = "merge"                                  # merge (audio esterno) | social (audio delle clip)
+    keep: list[list[float]] = field(default_factory=list)  # social: intervalli da tenere [inizio, fine]; vuoto = tutto
     version: int = FORMAT_VERSION
 
     @property

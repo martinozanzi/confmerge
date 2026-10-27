@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from .serde import from_dict, to_dict
 from .spec import (AudioSettings, CreditSettings, ExportSettings, Graphics, ImageSettings, RenderSpec,
-                   SubtitleSettings)
+                   SocialSettings, SubtitleSettings)
 
 
 def profile_from_spec(spec: RenderSpec, font: str = "Segoe UI") -> dict:
@@ -11,6 +11,7 @@ def profile_from_spec(spec: RenderSpec, font: str = "Segoe UI") -> dict:
         "graphics": to_dict(spec.graphics),
         "credit": to_dict(spec.credit),
         "export": {k: v for k, v in to_dict(spec.export).items() if k not in ("name",)},
+        "social": to_dict(spec.social),
         "audio": {k: v for k, v in to_dict(spec.audio).items() if k not in ("music_path",)},
         "subtitles": {k: v for k, v in to_dict(spec.subtitles).items()
                       if k not in ("lines", "range_start", "range_end")},
@@ -37,6 +38,8 @@ def apply_profile(spec: RenderSpec, profile: dict) -> None:
         music = spec.audio.music_path
         spec.audio = from_dict(AudioSettings, profile["audio"])
         spec.audio.music_path = music
+    if profile.get("social"):
+        spec.social = from_dict(SocialSettings, profile["social"])
     if profile.get("subtitles"):
         old = spec.subtitles
         spec.subtitles = from_dict(SubtitleSettings, profile["subtitles"])
