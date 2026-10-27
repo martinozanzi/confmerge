@@ -2,6 +2,8 @@ import os
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("CONFMERGE_NO_REVEAL", "1")
+os.environ.setdefault("CONFMERGE_NO_CONFIRM", "1")           # niente finestre «lavoro non salvato» nei test
+os.environ.setdefault("CONFMERGE_NO_RECOVERY", "1")
 
 import numpy as np
 import pytest

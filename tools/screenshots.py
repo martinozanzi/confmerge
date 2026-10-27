@@ -12,6 +12,8 @@ import tempfile
 import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("CONFMERGE_NO_CONFIRM", "1")
+os.environ.setdefault("CONFMERGE_NO_RECOVERY", "1")
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "tests"))

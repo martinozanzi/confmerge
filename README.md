@@ -32,6 +32,11 @@ Scorciatoie (elenco completo con F1): `Spazio`/`K` riproduci, `←/→` fotogram
   profili. Puoi correggere ogni riga, scegliere lo stile (carattere, colori, bordo, sfondo, posizione) ed esportare il file `.srt`.
 - *Musica di sottofondo*: un brano a tua scelta, con volume e abbassamento automatico quando qualcuno parla.
 
+**Lavoro al sicuro**: se chiudi con modifiche non salvate l'app ti chiede se salvare; ogni 30 secondi salva da sola (nel
+file del progetto, se ha un nome; altrimenti in una copia di sicurezza che ti viene proposta alla prossima apertura).
+I pulsanti «Indietro» e «Avanti» in alto (Ctrl+Z / Ctrl+Maiusc+Z) e la **Cronologia** (orologio) permettono di tornare a
+qualsiasi punto, anche per inizio e fine del video.
+
 Il tema è scuro, chiaro o «come il computer» (Impostazioni); «Riduci le animazioni» le disattiva.
 
 Impostazioni e profili: `%APPDATA%\ConfMerge`.

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -40,7 +41,11 @@ class Project:
         return self.atempo if self.use_drift_correction else 1.0
 
     def save(self, path: str | Path) -> None:
-        Path(path).write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+        """Salvataggio atomico: si scrive un file temporaneo e lo si sostituisce, così uno stop a metà non rovina il progetto."""
+        path = Path(path)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, path)
 
     @classmethod
     def load(cls, path: str | Path) -> "Project":

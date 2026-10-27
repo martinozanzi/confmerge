@@ -22,6 +22,7 @@ class SettingsDialog(QDialog):
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Impostazioni")
+        self.state_ = state
         self.resize(760, 700)
         outer = QVBoxLayout(self)
         body = QWidget()
@@ -42,6 +43,12 @@ class SettingsDialog(QDialog):
         self.reveal.setChecked(theme.prefs.get("reveal_after_export", True))
         self.reveal.toggled.connect(lambda on: theme.prefs.set("reveal_after_export", on))
         c.add(self.reveal)
+        self.autosave = Toggle("Salva da solo i progetti che hanno un nome (ogni 30 secondi)")
+        self.autosave.setChecked(state.settings.data.get("autosave_named", True))
+        self.autosave.toggled.connect(self._set_autosave)
+        c.add(self.autosave)
+        c.add(label("Se un progetto non ha ancora un nome, il programma tiene comunque una copia di sicurezza e te la "
+                    "propone alla prossima apertura.", "caption", True))
         lay.addWidget(c)
         c2 = Card()
         c2.add(label("Profili", "h2"))
@@ -56,6 +63,10 @@ class SettingsDialog(QDialog):
         bb.rejected.connect(self.reject)
         bb.button(QDialogButtonBox.Close).setText("Chiudi")
         outer.addWidget(bb)
+
+    def _set_autosave(self, on: bool):
+        self.state_.settings.data["autosave_named"] = on
+        self.state_.settings.save()
 
 
 class ShortcutsDialog(QDialog):
