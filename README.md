@@ -13,11 +13,12 @@ Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia i
 **Semplice** (la scelta di partenza, in tre passi):
 1. **Cartella**: trascina la cartella della conferenza. Parte subito l'analisi, con messaggi in italiano semplice.
 2. **Controlla**: guarda il video; la sincronia è «Ottima / Buona / Da controllare» (con «Ascolta 10 secondi» e, se serve, «Correggi»);
-   conferma inizio e fine; scegli il profilo (titolo, logo, credito) e compila i testi (titolo, relatore, data).
+   conferma inizio e fine; scegli il profilo (titolo, logo, credito), lo **stile del titolo** e della schermata finale tra i modelli
+   pronti (stile YouTube/Instagram/Canva), le **transizioni** (anteprima animata al passaggio del mouse) e compila i testi.
 3. **Esporta**: scegli «Consigliata per YouTube», «Più veloce» o «Massima qualità», vedi tempo e dimensione, premi «Esporta il video».
    Alla fine: «Apri la cartella», «Guarda il video», «Crea la miniatura», «Nuovo progetto».
 
-**Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Immagine, Grafica, Slide e PiP, Audio, Export e coda),
+**Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Formato e ritaglio, Titoli e transizioni, Logo e decorazioni, Slide e PiP, Audio, Export e coda),
 anteprima sempre visibile, sezioni comprimibili con ricerca rapida, pannello livelli (occhio, lucchetto, trascinamento),
 mini-timeline, annulla/ripristina, coda di export, parametri tecnici in «Avanzate» (chiuse di default).
 

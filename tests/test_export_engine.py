@@ -111,3 +111,27 @@ def test_decide_copy_and_credit_conflict(project):
     assert dec.mode == "copy" and dec.credit_conflict
     s.graphics.elements = [Element(id="x", text="a")]
     assert ee.decide(s, [rep.clips[0]]).mode == "encode"
+
+
+def test_transitions_all_export(qapp, project, tmp_path):
+    """Ogni transizione produce un file valido; la durata resta quella attesa (titolo + video + finale - sovrapposizioni)."""
+    from confmerge import transitions
+    d, rep = project
+    base = None
+    for t in transitions.TRANSITIONS:
+        spec = RenderSpec()
+        spec.graphics.title = Scene(True, 2.0, Background("solid", "#102040"), [Element(id="t", text="Titolo", size=0.1)],
+                                    fade=t.duration or 0.5, transition=t.id)
+        spec.graphics.outro = Scene(True, 2.0, Background("black"), [Element(id="o", text="Fine", size=0.1)],
+                                    fade=t.duration or 0.5, transition=t.id)
+        spec.credit.enabled = False
+        spec.image.clip_transition = transitions.nearest_join(t.id)
+        spec.export.encoder, spec.export.preset, spec.export.custom_height = "libx264", "Personalizzato", 360
+        spec.export.bitrate_mbps = 1.0
+        out = tmp_path / f"t_{t.id}.mp4"
+        r = ee.run_export(rep.project, rep.clips, spec, out, 5.0, 33.0, lambda f, s: None)
+        dur = float(probe(out)["format"]["duration"])
+        f = 0.0 if t.id == "cut" else min(t.duration, 1.0)
+        assert abs(dur - (2.0 + 28.0 + 2.0 - 2 * f)) < 0.6, (t.id, dur)
+        if base is None:
+            base = dur

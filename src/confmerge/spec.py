@@ -40,6 +40,8 @@ class ImageSettings:
     vertical_mode: str = "bars"   # bars | crop
     fade_in: float = 0.0          # video + audio
     fade_out: float = 0.0
+    clip_transition: str = "cut"       # tra una clip e l'altra: cut | fadeblack | fadewhite
+    clip_transition_dur: float = 0.6
 
 
 @dataclass
@@ -110,6 +112,9 @@ class Graphics:
     lower_thirds: list[LowerThird] = field(default_factory=list)
     title: Scene = field(default_factory=lambda: Scene(enabled=False, duration=4.0))
     outro: Scene = field(default_factory=lambda: Scene(enabled=False, duration=4.0))
+    title_template: str = ""          # modello scelto dalla galleria (solo per evidenziarlo)
+    outro_template: str = ""
+    transition_style: str = ""        # stile unico scelto nella modalità Semplice
 
 
 @dataclass

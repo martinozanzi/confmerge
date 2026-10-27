@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from .. import slides as sl
@@ -11,6 +11,7 @@ from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
 from ..spec import RenderSpec, output_size
 from ..view import source_to_frame
+from .theme import theme
 
 PREVIEW_W = 960
 
@@ -81,9 +82,13 @@ class Canvas(QWidget):
         s = PREVIEW_W / W
         return PREVIEW_W, max(2, round(H * s))
 
+    STAGE_PAD = 14
+
     def _target_rect(self) -> QRectF:
         W, H = self.frame_size()
-        s = min(self.width() / W, self.height() / H)
+        pad = self.STAGE_PAD
+        aw, ah = max(1, self.width() - 2 * pad), max(1, self.height() - 2 * pad)
+        s = min(aw / W, ah / H)
         return QRectF((self.width() - W * s) / 2, (self.height() - H * s) / 2, W * s, H * s)
 
     # --- composizione
@@ -163,11 +168,42 @@ class Canvas(QWidget):
             p.restore()
 
     # --- disegno
+    _tile: tuple | None = None          # (nome del tema, QPixmap) della trama a scacchi
+
+    @classmethod
+    def _stage_tile(cls) -> QPixmap:
+        t = theme.t
+        if cls._tile is None or cls._tile[0] != t.name:
+            px = QPixmap(32, 32)
+            px.fill(QColor(t.stage))
+            q = QPainter(px)
+            q.setPen(Qt.NoPen)
+            q.setBrush(QColor(t.stage2))
+            q.drawRect(0, 0, 16, 16)
+            q.drawRect(16, 16, 16, 16)
+            q.end()
+            cls._tile = (t.name, px)
+        return cls._tile[1]
+
+    def _draw_stage(self, p: QPainter, tr: QRectF) -> None:
+        """«Palco» a scacchi più chiaro del video, con ombra e bordo: si capisce sempre dove finisce l'immagine."""
+        p.fillRect(self.rect(), QBrush(self._stage_tile()))
+        for i, a in ((6, 18), (3, 30), (1, 45)):
+            c = QColor(0, 0, 0, a)
+            p.setPen(Qt.NoPen)
+            p.setBrush(c)
+            p.drawRoundedRect(tr.adjusted(-i, -i + 2, i, i + 2), 3, 3)
+        edge = QColor(theme.t.text)
+        edge.setAlphaF(0.55)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QPen(edge, 1))
+        p.drawRect(tr.adjusted(-0.5, -0.5, 0.5, 0.5))
+
     def paintEvent(self, _):
         p = QPainter(self)
-        p.fillRect(self.rect(), QColor("#0c0e10"))
         img = self.compose()
         tr = self._target_rect()
+        self._draw_stage(p, tr)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         p.drawImage(tr, img)
         if self.mode == "crop" and self._crop_rect is not None:

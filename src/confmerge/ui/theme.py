@@ -42,6 +42,10 @@ class Tokens:
     accent: str
     accent2: str
     on_accent: str
+    btn1: str            # sfumatura dei pulsanti principali (contrasto alto con il testo bianco)
+    btn2: str
+    stage: str           # «palco» dietro al video nell'anteprima
+    stage2: str
     success: str
     warning: str
     error: str
@@ -50,14 +54,14 @@ class Tokens:
     scroll: str
 
 
-DARK = Tokens("dark", bg="#0F1115", surface="#171A21", surface2="#1F232C", border="#2A2F3A", text="#E8EAF0",
-              text2="#9AA3B2", accent="#6C7BFF", accent2="#8F6CFF", on_accent="#FFFFFF", success="#3DD598",
-              warning="#FFB020", error="#FF5C6C", hover="rgba(255,255,255,0.06)", shadow="rgba(0,0,0,0.35)",
-              scroll="#343A47")
-LIGHT = Tokens("light", bg="#F5F6FA", surface="#FFFFFF", surface2="#EEF0F6", border="#DDE1EA", text="#14171F",
-               text2="#5B6575", accent="#5565F5", accent2="#7B58F0", on_accent="#FFFFFF", success="#14A36B",
-               warning="#C27A00", error="#DC3545", hover="rgba(20,23,31,0.06)", shadow="rgba(20,30,60,0.12)",
-               scroll="#C5CAD6")
+DARK = Tokens("dark", bg="#0E1014", surface="#15181E", surface2="#1D2129", border="#2A2F39", text="#ECEEF3",
+              text2="#9CA3B0", accent="#4C8DF6", accent2="#2DD4BF", on_accent="#FFFFFF", btn1="#2563EB", btn2="#1D7FE8",
+              stage="#323844", stage2="#2B303B", success="#3DD598", warning="#FFB020", error="#FF5C6C",
+              hover="rgba(255,255,255,0.06)", shadow="rgba(0,0,0,0.35)", scroll="#353B47")
+LIGHT = Tokens("light", bg="#F4F5F8", surface="#FFFFFF", surface2="#ECEEF3", border="#DADEE6", text="#12151C",
+               text2="#586072", accent="#2563EB", accent2="#0EA5A4", on_accent="#FFFFFF", btn1="#2563EB", btn2="#1D7FE8",
+               stage="#CDD2DC", stage2="#C4CAD5", success="#14A36B", warning="#B26A00", error="#DC3545",
+               hover="rgba(18,21,28,0.06)", shadow="rgba(20,30,60,0.12)", scroll="#C3C9D5")
 
 
 def with_alpha(color: str, a: float) -> str:
@@ -98,7 +102,7 @@ class Theme(QObject):
     def load_fonts(self) -> None:
         if self._fonts_loaded:
             return
-        for f in sorted((RESOURCES / "fonts").glob("Inter-*.ttf")):
+        for f in sorted((RESOURCES / "fonts").glob("*.ttf")):
             QFontDatabase.addApplicationFont(str(f))
         self._fonts_loaded = True
 
@@ -245,8 +249,9 @@ def build_qss(th: Theme) -> str:
     chk = th.cached_icon_path("check", t.on_accent)
     down = th.cached_icon_path("chevron-down", t.text2)
     up = th.cached_icon_path("chevron-up", t.text2)
-    grad = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {t.accent},stop:1 {t.accent2})"
-    grad_h = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {QColor(t.accent).lighter(112).name()},stop:1 {QColor(t.accent2).lighter(112).name()})"
+    grad = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {t.accent},stop:1 {t.accent2})"          # barre di avanzamento, slider
+    btn = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {t.btn1},stop:1 {t.btn2})"               # pulsanti principali
+    grad_h = f"qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {QColor(t.btn1).lighter(112).name()},stop:1 {QColor(t.btn2).lighter(112).name()})"
     return f"""
 * {{ font-family: "Inter", "Segoe UI", sans-serif; }}
 QWidget {{ color: {t.text}; font-size: {px(FONT_BODY)}px; }}
@@ -274,9 +279,9 @@ QPushButton:hover {{ background: {QColor(t.surface2).lighter(112).name() if t.na
 QPushButton:pressed {{ background: {t.border}; }}
 QPushButton:focus {{ border: 1px solid {t.accent}; }}
 QPushButton:disabled {{ background: {t.surface}; border-color: {t.border}; }}
-QPushButton[variant="primary"] {{ background: {grad}; color: {t.on_accent}; border: none; font-weight: 600; padding: 0 {S3}px; }}
+QPushButton[variant="primary"] {{ background: {btn}; color: {t.on_accent}; border: none; font-weight: 600; padding: 0 {S3}px; }}
 QPushButton[variant="primary"]:hover {{ background: {grad_h}; }}
-QPushButton[variant="primary"]:pressed {{ background: {t.accent}; }}
+QPushButton[variant="primary"]:pressed {{ background: {t.btn1}; }}
 QPushButton[variant="primary"]:focus {{ border: 2px solid {t.text}; }}
 QPushButton[variant="primary"]:disabled {{ background: {t.border}; color: {t.text2}; }}
 QPushButton[variant="ghost"] {{ background: transparent; border: 1px solid transparent; }}

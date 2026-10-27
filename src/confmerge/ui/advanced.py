@@ -26,8 +26,10 @@ class _WidthWatcher(QObject):
         return False
 
 
-PHASES = [("folder-open", "Sorgenti"), ("audio-waveform", "Sincronia e tagli"), ("image", "Immagine"),
-          ("layers", "Grafica"), ("presentation", "Slide e PiP"), ("volume-2", "Audio"), ("download", "Export e coda")]
+PHASES = [("folder-open", "Sorgenti"), ("audio-waveform", "Sincronia e tagli"), ("crop", "Formato e ritaglio"),
+          ("type", "Titoli e transizioni"), ("layers", "Logo e decorazioni"), ("presentation", "Slide e PiP"),
+          ("volume-2", "Audio"), ("download", "Export e coda")]
+DECORATIONS = 4
 
 
 class AdvancedShell(QWidget):
@@ -59,15 +61,19 @@ class AdvancedShell(QWidget):
         self.stack.addWidget(self.src_stack)
         self.review = ReviewPage(state)
         self.stack.addWidget(self.review)
-        self.image = GraphicsPage(state, self.review, ("image",), "Immagine",
+        self.image = GraphicsPage(state, self.review, ("image",), "Formato e ritaglio",
                                   "Formato, ritaglio, zoom e dissolvenze. L'anteprima mostra il risultato.")
-        self.graphics = GraphicsPage(state, self.review, ("overlay", "title", "outro", "lt", "credit"), "Grafica",
-                                     "Titoli, logo, testi, lower third, schermata finale e credito.")
+        self.titles = GraphicsPage(state, self.review, ("title", "lt", "caption", "outro", "trans", "credit"),
+                                   "Titoli e transizioni",
+                                   "Scegli un modello pronto, scrivi i testi e decidi come cambiano le scene.")
+        self.graphics = GraphicsPage(state, self.review, ("overlay",), "Logo e decorazioni",
+                                     "Logo, scritte, forme e barra di avanzamento sopra il video: i livelli si trascinano.")
+        self.titles.goPhase.connect(lambda _k: self.goto(DECORATIONS))
         self.slides = GraphicsPage(state, self.review, ("slides",), "Slide e PiP",
                                    "Slide a schermo intero o in piccolo accanto al relatore.")
         self.audio = AudioPage(state)
         self.export = ExportPage(state, self.review)
-        for w in (self.image, self.graphics, self.slides, self.audio):
+        for w in (self.image, self.titles, self.graphics, self.slides, self.audio):
             self.stack.addWidget(w)
         from .graphics_page import scrolled
         sa = scrolled(self.export)

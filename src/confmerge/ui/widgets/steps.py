@@ -32,7 +32,7 @@ class StepIndicator(QWidget):
         for i, lab in enumerate(self.labels):
             cx = seg * i + seg / 2
             done, active = i <= self.done_upto, i == self.current
-            col = QColor(t.success if done else t.accent if active else t.border)
+            col = QColor(t.success if done else t.btn1 if active else t.border)
             if i < n - 1:
                 p.setPen(QPen(QColor(t.success if done else t.border), 2))
                 p.drawLine(int(cx + 16), 14, int(seg * (i + 1) + seg / 2 - 16), 14)

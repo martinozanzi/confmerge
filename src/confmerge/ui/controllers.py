@@ -24,6 +24,11 @@ from ..worker import Worker
 
 log = logging.getLogger(__name__)
 
+def theme_prefs():
+    from .theme import theme
+    return theme.prefs
+
+
 ORDER_MODES = ("date", "name", "manual")
 
 
@@ -634,6 +639,10 @@ class ExportController(QObject):
             if it.status == FAILED:
                 log.error("Export fallito (%s): %s", it.name, it.error)
         self.finished.emit(results)
+        ok = [it for it, _ in results if it.status == DONE and getattr(it, "path", None)]
+        if ok and theme_prefs().get("reveal_after_export", True):
+            from .platform_utils import reveal_in_folder
+            reveal_in_folder(ok[-1].path)                 # apre la cartella e seleziona il video appena creato
         if self.after_action != "none" and sys.platform == "win32" and all(it.status != FAILED for it, _ in results):
             self.powerRequested.emit(self.after_action)
 
