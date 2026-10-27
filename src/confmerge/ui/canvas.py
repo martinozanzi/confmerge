@@ -33,6 +33,7 @@ class Canvas(QWidget):
         self.scene_target = "main"
         self.elements_override: list[Element] | None = None
         self.fixed_size: tuple[int, int] | None = None   # es. miniatura 1280×720
+        self.safe_zone = (0.0, 0.0, 0.0, 0.0)            # sopra, sotto, sinistra, destra (frazioni): Studio Social
         self.out_t = 0.0                 # tempo di uscita
         self.seg_dur = 1e9
         self.selected = -1
@@ -114,7 +115,10 @@ class Canvas(QWidget):
                 s = min(W / fw, H / fh)
                 p.drawImage(QRectF((W - fw * s) / 2, (H - fh * s) / 2, fw * s, fh * s), self.frame)
             else:
-                src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t)
+                social = self._is_social()
+                if social and spec.image.reframe == "blur" and abs(fw / fh - W / H) > 0.01:
+                    self._draw_blur_bg(p, W, H)
+                src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t, social)
                 p.drawImage(dst, self.frame, src)
                 self._draw_slides(p, W, H)
         p.end()
@@ -131,6 +135,45 @@ class Canvas(QWidget):
         if ln is None:
             return img
         return compositor.render_frame([subtitles.preview_element(st, ln.text, W, H)], W, H, 1.0, 1e9, img)
+
+    def _is_social(self) -> bool:
+        pr = self.state.project
+        return bool(pr and pr.kind == "social")
+
+    def _draw_blur_bg(self, p: QPainter, W: int, H: int) -> None:
+        """Sfondo sfocato per il video «intero» in un formato diverso: la stessa immagine ingrandita e sfumata."""
+        sw, sh = max(8, W // 10), max(8, H // 10)
+        small = self.frame.scaled(sw, sh, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        small = small.copy(max(0, (small.width() - sw) // 2), max(0, (small.height() - sh) // 2), sw, sh)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawImage(QRectF(0, 0, W, H), small)
+        p.fillRect(QRectF(0, 0, W, H), QColor(0, 0, 0, 40))
+
+    def _draw_safe_zone(self, p: QPainter, tr: QRectF) -> None:
+        """Le parti dell'immagine coperte dall'interfaccia della piattaforma (solo anteprima: non finiscono nel file)."""
+        top, bottom, left, right = self.safe_zone
+        if not (top or bottom or left or right):
+            return
+        zones = [QRectF(tr.x(), tr.y(), tr.width(), tr.height() * top),
+                 QRectF(tr.x(), tr.bottom() - tr.height() * bottom, tr.width(), tr.height() * bottom),
+                 QRectF(tr.x(), tr.y() + tr.height() * top, tr.width() * left, tr.height() * (1 - top - bottom)),
+                 QRectF(tr.right() - tr.width() * right, tr.y() + tr.height() * top, tr.width() * right,
+                        tr.height() * (1 - top - bottom))]
+        p.setPen(Qt.NoPen)
+        p.setBrush(QBrush(QColor(255, 70, 70, 70), Qt.BDiagPattern))
+        edge = QPen(QColor(255, 110, 110, 200), 1, Qt.DashLine)
+        for z in zones:
+            if z.width() > 1 and z.height() > 1:
+                p.setPen(Qt.NoPen)
+                p.setBrush(QColor(255, 70, 70, 45))
+                p.drawRect(z)
+                p.setBrush(QBrush(QColor(255, 120, 120, 90), Qt.BDiagPattern))
+                p.drawRect(z)
+        inner = QRectF(tr.x() + tr.width() * left, tr.y() + tr.height() * top,
+                       tr.width() * (1 - left - right), tr.height() * (1 - top - bottom))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(edge)
+        p.drawRect(inner)
 
     def _main_dur(self) -> float:
         pr = self.state.project
@@ -216,6 +259,8 @@ class Canvas(QWidget):
         self._draw_stage(p, tr)
         p.setRenderHint(QPainter.SmoothPixmapTransform)
         p.drawImage(tr, img)
+        if self.mode == "video" and self.safe_zone != (0.0, 0.0, 0.0, 0.0):
+            self._draw_safe_zone(p, tr)
         if self.mode == "crop" and self._crop_rect is not None:
             r = self._crop_rect
             p.setPen(QPen(QColor("#3ddc84"), 2))

@@ -7,7 +7,7 @@ from .render.model import Element, LowerThird, Scene
 from .serde import from_dict, to_dict
 
 RES_SHORT = {"720p": 720, "1080p": 1080, "1440p": 1440, "4K": 2160}
-ASPECTS = {"16:9": (16, 9), "4:3": (4, 3), "1:1": (1, 1), "9:16": (9, 16)}
+ASPECTS = {"16:9": (16, 9), "4:3": (4, 3), "1:1": (1, 1), "9:16": (9, 16), "4:5": (4, 5)}
 LAYOUTS = {
     "speaker": "Solo relatore",
     "slide_full": "Slide a schermo intero, relatore in piccolo",
@@ -42,6 +42,9 @@ class ImageSettings:
     fade_out: float = 0.0
     clip_transition: str = "cut"       # tra una clip e l'altra: cut | fadeblack | fadewhite
     clip_transition_dur: float = 0.6
+    reframe: str = "fill"          # come entra un video orizzontale in un formato verticale: fill (ritaglia) | blur | bars
+    reframe_x: float = 0.5         # fill: dove sta la finestra di ritaglio (0 = sinistra, 1 = destra)
+    reframe_y: float = 0.5
 
 
 @dataclass
@@ -153,10 +156,21 @@ class Graphics:
 
 
 @dataclass
+class SocialSettings:
+    """Studio Social: dove pubblicare e come mostrare le zone di sicurezza (non finiscono mai nel file)."""
+    platforms: list[str] = field(default_factory=lambda: ["shorts"])
+    show_safe: bool = True
+    skip_silence_db: float = 35.0      # sensibilità: quanti dB sotto la voce si considera silenzio
+    skip_silence_min: float = 0.7      # pausa minima da togliere (s)
+    skip_silence_pad: float = 0.15     # margine tenuto prima e dopo il parlato (s)
+
+
+@dataclass
 class RenderSpec:
     image: ImageSettings = field(default_factory=ImageSettings)
     audio: AudioSettings = field(default_factory=AudioSettings)
     subtitles: SubtitleSettings = field(default_factory=SubtitleSettings)
+    social: SocialSettings = field(default_factory=SocialSettings)
     graphics: Graphics = field(default_factory=Graphics)
     slides: SlideSettings = field(default_factory=SlideSettings)
     credit: CreditSettings = field(default_factory=CreditSettings)

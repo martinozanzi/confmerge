@@ -12,6 +12,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import numpy as np
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from .. import estimator, export_engine as ee, paths, pipeline, proxy
@@ -558,6 +559,21 @@ class ExportController(QObject):
         t0, t1 = self.trim_range()
         return Prepared(spec, proj, dec, out, t0, t1)
 
+    def prepare_social(self, spec: RenderSpec, suffix: str) -> Prepared | None:
+        """Una versione per piattaforma (Studio Social): stesso lavoro, formato e nome diversi."""
+        st = self.state
+        if not st.project:
+            return None
+        proj = copy.deepcopy(st.project)
+        out_dir = Path(st.spec.export.out_dir or Path(proj.clips[0]).parent)
+        name = (st.spec.export.name or "video").strip() or "video"
+        out = out_dir / f"{name}_{suffix}.mp4"
+        n = 1
+        while out.exists() or any(it.name == out.name for it in st.queue.items if it.status not in (DONE, FAILED)):
+            n += 1
+            out = out_dir / f"{name}_{suffix}_{n}.mp4"
+        return Prepared(spec, proj, ee.decide(spec, st.clips), out, 0.0, proj.total_duration)
+
     def space_warnings(self, prep: Prepared) -> list[str]:
         W, H = output_size(prep.spec.image, prep.spec.export)
         est = self.est
@@ -678,6 +694,8 @@ class SubtitleController(QObject):
 
     def seconds(self) -> float:
         st = self.state
+        if st.project and st.project.kind == "social":
+            return st.project.total_duration            # si trascrive tutto: i tagli si possono cambiare dopo
         return max(0.0, st.trim_end - st.trim_start) if st.project else 0.0
 
     def cost_text(self) -> str:
@@ -707,6 +725,9 @@ class SubtitleController(QObject):
             return
         st = self.state
         p, t0, t1 = st.project, st.trim_start, st.trim_end
+        social_clips = list(st.clips) if p.kind == "social" else None
+        if social_clips:
+            t0, t1 = 0.0, p.total_duration
         key = st.settings.keys.get("groq")
         max_chars = st.spec.subtitles.max_chars
         vocab = self._vocabulary()
@@ -717,9 +738,15 @@ class SubtitleController(QObject):
             work.mkdir(parents=True, exist_ok=True)
             wav = work / "audio.wav"
             report(0.02, "Preparo l'audio…")
-            chain = ",".join([pl.audio_filter(p, t0), f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS",
-                              "aformat=sample_rates=16000:channel_layouts=mono"])
-            run_ffmpeg(["-i", str(p.audio), "-vn", "-af", chain, "-c:a", "pcm_s16le", str(wav)], cancel=cancel)
+            if social_clips:
+                from scipy.io import wavfile
+                from .. import social
+                x = social.decode_waveform(social_clips, 16000)
+                wavfile.write(str(wav), 16000, (np.clip(x, -1, 1) * 32767).astype("<i2"))
+            else:
+                chain = ",".join([pl.audio_filter(p, t0), f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS",
+                                  "aformat=sample_rates=16000:channel_layouts=mono"])
+                run_ffmpeg(["-i", str(p.audio), "-vn", "-af", chain, "-c:a", "pcm_s16le", str(wav)], cancel=cancel)
             words = transcribe.transcribe_wav(wav, key, work, "it", vocab,
                                               lambda f, m: report(0.05 + 0.9 * f, m), cancel)
             return transcribe.build_lines(words, max_chars=max_chars), t0, t1

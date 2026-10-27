@@ -17,32 +17,33 @@ def _dir(root: Path) -> Path:
     return d
 
 
-def recovery_file(root: Path) -> Path:
-    return _dir(root) / "recupero.confmerge"
+def recovery_file(root: Path, slot: str = "") -> Path:
+    """`slot`: «» per Merge Conferenze, «social» per Studio Social (due lavori distinti)."""
+    return _dir(root) / (f"recupero_{slot}.confmerge" if slot else "recupero.confmerge")
 
 
-def _meta_file(root: Path) -> Path:
-    return _dir(root) / "recupero.json"
+def _meta_file(root: Path, slot: str = "") -> Path:
+    return _dir(root) / (f"recupero_{slot}.json" if slot else "recupero.json")
 
 
-def write_recovery(project: Project, root: Path, name: str = "") -> None:
-    project.save(recovery_file(root))
-    _meta_file(root).write_text(json.dumps({"saved_at": time.time(), "name": name}), encoding="utf-8")
+def write_recovery(project: Project, root: Path, name: str = "", slot: str = "") -> None:
+    project.save(recovery_file(root, slot))
+    _meta_file(root, slot).write_text(json.dumps({"saved_at": time.time(), "name": name}), encoding="utf-8")
 
 
-def has_recovery(root: Path) -> bool:
-    return recovery_file(root).exists()
+def has_recovery(root: Path, slot: str = "") -> bool:
+    return recovery_file(root, slot).exists()
 
 
-def recovery_info(root: Path) -> dict:
+def recovery_info(root: Path, slot: str = "") -> dict:
     try:
-        return json.loads(_meta_file(root).read_text(encoding="utf-8"))
+        return json.loads(_meta_file(root, slot).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
 
 
-def clear_recovery(root: Path) -> None:
-    for f in (recovery_file(root), _meta_file(root)):
+def clear_recovery(root: Path, slot: str = "") -> None:
+    for f in (recovery_file(root, slot), _meta_file(root, slot)):
         try:
             f.unlink()
         except OSError:

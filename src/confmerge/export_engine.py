@@ -101,16 +101,16 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
                on_progress: Progress | None = None, cancel: threading.Event | None = None,
                force_mode: str | None = None) -> ExportReport:
     out = Path(out)
-    inputs = {Path(c).resolve() for c in p.clips} | {Path(p.audio).resolve()}
+    inputs = {Path(c).resolve() for c in p.clips} | ({Path(p.audio).resolve()} if p.audio else set())
     if out.resolve() in inputs:
         raise FFmpegError("Il file di uscita coincide con un file di input: gli originali non vengono mai modificati")
     out.parent.mkdir(parents=True, exist_ok=True)
     dec = decide(spec, clips)
-    mode = force_mode or dec.mode
+    mode = "encode" if p.kind == "social" else (force_mode or dec.mode)     # il social è sempre ricodificato (tagli, formato)
     started = time.time()
     notes = list(dec.warnings)
     loud = None
-    if spec.audio.loudnorm:
+    if spec.audio.loudnorm and p.kind != "social":
         loud = measure_loudness(p, spec, t0, t1)
     workdir = paths.temp_dir() / f"job_{int(started * 1000)}"
     try:
@@ -157,14 +157,16 @@ def render_sample(p: Project, clips: list[MediaInfo], spec: RenderSpec, start: f
         s2.graphics.title.enabled = False
         s2.graphics.outro.enabled = False
         t_start = time.time()
-        res = graph.build(p, clips, s2, out, t0, t1, workdir, with_scenes=False, encoder=enc, slide_images=slides_imgs)
+        rng = [(t0, t1)] if p.kind == "social" else None
+        res = graph.build(p, clips, s2, out, t0, t1, workdir, with_scenes=False, encoder=enc, slide_images=slides_imgs,
+                          ranges=rng)
         try:
             run_ffmpeg(res.args, res.duration, None, cancel)
         except FFmpegError:
             if enc == "libx264":
                 raise
             res = graph.build(p, clips, s2, out, t0, t1, workdir, with_scenes=False, encoder="libx264",
-                              slide_images=slides_imgs)
+                              slide_images=slides_imgs, ranges=rng)
             run_ffmpeg(res.args, res.duration, None, cancel)
         wall = max(time.time() - t_start, 1e-3)
         return wall, (t1 - t0) / wall, out.stat().st_size
@@ -186,9 +188,10 @@ class Estimate:
 
 def estimate(p: Project, clips: list[MediaInfo], spec: RenderSpec, t0: float, t1: float,
              corrections: dict | None = None, sample_cache: dict | None = None,
-             cancel: threading.Event | None = None) -> Estimate:
-    """Stima tempo e dimensione: benchmark su un campione di ~10 s dal centro, esteso alla durata finale."""
-    D = t1 - t0
+             cancel: threading.Event | None = None, D: float | None = None) -> Estimate:
+    """Stima tempo e dimensione: benchmark su un campione di ~10 s dal centro, esteso alla durata finale.
+    `D`: durata del video finito se diversa da t1 - t0 (Studio Social, dopo i tagli)."""
+    D = D if D is not None else t1 - t0
     W, H = output_size(spec.image, spec.export)
     h_short = min(W, H)
     fps = spec.image.fps or clips[0].fps or 30.0
@@ -218,7 +221,7 @@ def estimate(p: Project, clips: list[MediaInfo], spec: RenderSpec, t0: float, t1
         wall, speed, size_b = sample_cache[key]
     else:
         tmp = paths.temp_dir() / "bench.mp4"
-        mid = t0 + (D - sample_s) / 2
+        mid = t0 + ((t1 - t0) - sample_s) / 2
         wall, speed, size_b = render_sample(p, clips, spec, mid, sample_s, tmp, cancel)
         tmp.unlink(missing_ok=True)
         if sample_cache is not None:

@@ -33,13 +33,19 @@ def apply_preset(st: SubtitleSettings, name: str) -> None:
         setattr(st, k, v)
 
 
-def effective_lines(st: SubtitleSettings, t0: float, t1: float) -> list[SubLine]:
-    """Righe visibili nell'intervallo del video, con i tempi riportati a 0 = inizio del video."""
+def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = None) -> list[SubLine]:
+    """Righe visibili nel video finito, con i tempi di uscita (0 = inizio). Accetta un intervallo (t0, t1) oppure la lista
+    degli intervalli tenuti: una riga che attraversa un taglio si spezza in due."""
+    ranges = t0 if isinstance(t0, list) else [(t0, t1)]
+    from . import edl
     out = []
     for ln in st.lines:
-        a, b = max(ln.start, t0), min(ln.end, t1)
-        if b - a > 0.05 and ln.text.strip():
-            out.append(SubLine(a - t0, b - t0, ln.text.strip()))
+        if not ln.text.strip():
+            continue
+        for a, b in edl.remap_span(ranges, ln.start, ln.end):
+            if b - a > 0.05:
+                out.append(SubLine(a, b, ln.text.strip()))
+    out.sort(key=lambda x: x.start)
     return out
 
 
@@ -56,7 +62,7 @@ def _srt_time(t: float) -> str:
     return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
 
 
-def to_srt(st: SubtitleSettings, t0: float = 0.0, t1: float = 1e9) -> str:
+def to_srt(st: SubtitleSettings, t0: float | list = 0.0, t1: float = 1e9) -> str:
     lines = effective_lines(st, t0, t1)
     return "\n".join(f"{i}\n{_srt_time(ln.start)} --> {_srt_time(ln.end)}\n{ln.text}\n"
                      for i, ln in enumerate(lines, 1))
@@ -141,7 +147,7 @@ def _fp(p: Path) -> str:
     return str(p).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
 
 
-def to_ass(st: SubtitleSettings, t0: float, t1: float, W: int, H: int, fonts_dir: Path | None = None) -> str:
+def to_ass(st: SubtitleSettings, t0: float | list, t1: float | None, W: int, H: int, fonts_dir: Path | None = None) -> str:
     px = st.size * H
     size = px * libass_scale(st, fonts_dir)
     align = {"bottom": 2, "middle": 5, "top": 8}.get(st.position, 2)
@@ -169,12 +175,12 @@ def to_ass(st: SubtitleSettings, t0: float, t1: float, W: int, H: int, fonts_dir
     return head + "\n".join(body) + "\n"
 
 
-def write_ass(st: SubtitleSettings, t0: float, t1: float, W: int, H: int, path: Path,
+def write_ass(st: SubtitleSettings, ranges: list, W: int, H: int, path: Path,
               fonts_dir: Path | None = None) -> bool:
-    """Scrive il file ASS; False se nell'intervallo non c'è nessuna riga."""
-    if not effective_lines(st, t0, t1):
+    """Scrive il file ASS; False se nell'intervallo non c'è nessuna riga. `ranges`: intervalli tenuti [(a, b)…]."""
+    if not effective_lines(st, ranges):
         return False
-    path.write_text(to_ass(st, t0, t1, W, H, fonts_dir), encoding="utf-8")
+    path.write_text(to_ass(st, ranges, None, W, H, fonts_dir), encoding="utf-8")
     return True
 
 

@@ -7,7 +7,7 @@ overlay, lower third, slide/PiP e logo finale, ed esporta un MP4 pronto da caric
 Licenza MIT – © 2026 Martino Zanzi – https://github.com/martinozanzi/confmerge
 Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
-## Uso
+## Uso di Merge Conferenze
 Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia in alto a destra, senza perdere nulla):
 
 **Semplice** (la scelta di partenza, in tre passi):
@@ -17,6 +17,27 @@ Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia i
    pronti (stile YouTube/Instagram/Canva), le **transizioni** (anteprima animata al passaggio del mouse) e compila i testi.
 3. **Esporta**: scegli «Consigliata per YouTube», «Più veloce» o «Massima qualità», vedi tempo e dimensione, premi «Esporta il video».
    Alla fine: «Apri la cartella», «Guarda il video», «Crea la miniatura», «Nuovo progetto».
+
+## Studio Social
+
+Alla prima apertura scegli lo strumento (poi si ricorda l'ultima scelta; si cambia con «Social / Conferenze» in alto):
+**Studio Social** per video brevi pronti per le piattaforme, **Merge Conferenze** per unire riprese e audio esterno.
+Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quattro passi:
+
+1. **Video**: trascina uno o più file (si mettono uno dopo l'altro).
+2. **Taglia**: forma d'onda con le parti tolte in scuro. «Togli i silenzi» (sensibilità Delicata/Normale/Decisa) oppure trascina
+   su una parte e premi «Togli» (Canc). In riproduzione le parti tolte si saltano. Tutto si annulla con «Indietro» e compare nella Cronologia come «Tagli».
+3. **Aspetto**: scegli le piattaforme (YouTube, YouTube Shorts, Instagram Reel, TikTok, Threads, Instagram quadrato, X),
+   come entra il video orizzontale nel formato verticale (**Riempi** con posizione regolabile, **Sfocato**, **Bande**), le zone
+   coperte dall'app (solo in anteprima, mai nel file), i sottotitoli e la musica.
+4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
+   I sottotitoli sono spostati sopra la zona coperta dall'app e la voce è portata a un livello adatto ai social.
+
+Le misure delle piattaforme (formato, durata massima, zone di sicurezza) sono approssimative e cambiano: si possono correggere
+con un file `piattaforme.json` nella cartella delle impostazioni, per esempio
+`{"tiktok": {"max_s": 600, "safe": [0.12, 0.25, 0.04, 0.14]}}` (margini sopra, sotto, sinistra, destra).
+
+## Merge Conferenze
 
 **Avanzata**: barra laterale con le fasi (Sorgenti, Sincronia e tagli, Formato, Titoli e transizioni, Logo e grafica, Slide e PiP, Audio, Export e coda),
 anteprima sempre visibile, sezioni comprimibili con ricerca rapida, pannello livelli (occhio, lucchetto, trascinamento),

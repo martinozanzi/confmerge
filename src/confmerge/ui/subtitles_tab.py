@@ -262,7 +262,7 @@ class SubtitlesTab(QWidget):
         base = Path(st.spec.export.out_dir or str(Path.home())) / f"{st.spec.export.name or 'sottotitoli'}.srt"
         path, _ = QFileDialog.getSaveFileName(self, "Esporta sottotitoli", str(base), "Sottotitoli (*.srt)")
         if path:
-            Path(path).write_text(S.to_srt(self.sub(), st.trim_start, st.trim_end), encoding="utf-8")
+            Path(path).write_text(S.to_srt(self.sub(), st.ranges()), encoding="utf-8")
 
 
 class SimpleSubtitlesCard:

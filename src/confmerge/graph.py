@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QImage
 
-from . import audio_fx, credit, encoders, paths, slides as sl, subtitles, transitions
+from . import audio_fx, credit, edl, encoders, paths, slides as sl, subtitles, transitions
 from .ffmpeg_wrapper import FFmpegError
 from .media_scan import MediaInfo
 from .pipeline import audio_filter, plan_segments
@@ -98,7 +98,8 @@ def add_layers(g: _G, cur: str, layers: list[compositor.Layer], fmt: str = "yuv4
     return cur
 
 
-def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: float) -> str:
+def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: float, tag: str = "0",
+                         social: bool = False) -> str:
     im = spec.image
     ch = []
     l, t, r, b = im.crop_l, im.crop_t, im.crop_r, im.crop_b
@@ -113,14 +114,36 @@ def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: fl
                   f"x='max(0,min(iw-ow,{im.cx:.5f}*iw-ow/2))':y='max(0,min(ih-oh,{im.cy:.5f}*ih-oh/2))'")
         sw, sh = sw / z, sh / z
     ar_src, ar_out = sw / max(sh, 1), W / H
+    mode = im.reframe if social else ("fill" if im.vertical_mode == "crop" else "bars")
+    tail = f"fps={fps:.5f},setsar=1,format=yuv420p"
     if abs(ar_src - ar_out) < 0.01:
         ch.append(f"scale={W}:{H}")
-    elif im.vertical_mode == "crop":
-        ch.append(f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}")
+    elif mode == "fill":
+        rx, ry = max(0.0, min(1.0, im.reframe_x)), max(0.0, min(1.0, im.reframe_y))
+        ch.append(f"scale={W}:{H}:force_original_aspect_ratio=increase,"
+                  f"crop={W}:{H}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*{ry:.4f}'")
+    elif mode == "blur":
+        sw_, sh_ = max(2, W // 6 // 2 * 2), max(2, H // 6 // 2 * 2)
+        pre = ",".join(ch + ["split=2[bg%s][fg%s]" % (tag, tag)])
+        bg = (f"[bg{tag}]scale={sw_}:{sh_}:force_original_aspect_ratio=increase,crop={sw_}:{sh_},gblur=sigma=5,"
+              f"scale={W}:{H},eq=brightness=-0.12[bgb{tag}]")
+        fg = f"[fg{tag}]scale={W}:{H}:force_original_aspect_ratio=decrease[fgs{tag}]"
+        return f"{pre};{bg};{fg};[bgb{tag}][fgs{tag}]overlay=(W-w)/2:(H-h)/2,{tail}"
     else:
         ch.append(f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:black")
-    ch += [f"fps={fps:.5f}", "setsar=1", "format=yuv420p"]
+    ch.append(tail)
     return ",".join(ch)
+
+
+def _clip_audio(k: int, seg) -> str:
+    """Audio di un pezzo di clip, lungo esattamente quanto il suo video, con microdissolvenze che evitano i «click» ai tagli."""
+    L, f = seg.length, 0.008
+    if seg.clip.has_audio:
+        src = f"[{k}:a:0]aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,asetpts=PTS-STARTPTS"
+    else:
+        src = "anullsrc=r=48000:cl=stereo"
+    return (f"{src},apad=whole_dur={L:.4f},atrim=end={L:.4f},asetpts=PTS-STARTPTS,"
+            f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, L - f):.4f}:d={f}")
 
 
 def _fpath(p: Path) -> str:
@@ -196,7 +219,8 @@ def _graphics_elements(spec: RenderSpec, D: float) -> list[Element]:
 
 def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: float, t1: float,
           workdir: Path, *, with_scenes: bool = True, loud: dict | None = None,
-          encoder: str | None = None, slide_images: list[QImage] | None = None) -> BuildResult:
+          encoder: str | None = None, slide_images: list[QImage] | None = None,
+          ranges: list[tuple[float, float]] | None = None) -> BuildResult:
     global _counter
     _counter = 0
     workdir.mkdir(parents=True, exist_ok=True)
@@ -205,7 +229,9 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     ref = clips[0]
     fps = im.fps or ref.fps or 30.0
     h_short = min(W, H)
-    D = t1 - t0
+    ranges = ranges or edl.ranges_for(p, t0, t1)
+    social = p.kind == "social"
+    D = edl.total_len(ranges)
     if D < 1.0:
         raise FFmpegError("L'intervallo di taglio è vuoto o troppo corto")
     enc = encoder or encoders.resolve_encoder(spec.export.encoder)
@@ -214,19 +240,26 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     frames = 0
 
     # --- 1. clip → [vc]
-    segs = plan_segments(clips, t0, t1)
+    segs = [s for a, b in ranges for s in plan_segments(clips, a, b)]
+    if not segs:
+        raise FFmpegError("Nessuna parte del video da esportare")
     for s in segs:
         k = g.inp("-ss", f"{s.ss:.6f}", "-t", f"{s.length:.6f}", "-i", str(s.clip.path))
-        g.f.append(f"[{k}:v:0]{_main_chain_for_clip(s.clip, spec, W, H, fps)}[v{k}]")
+        g.f.append(f"[{k}:v:0]{_main_chain_for_clip(s.clip, spec, W, H, fps, str(k), social)}[v{k}]")
+        if social:
+            g.f.append(f"{_clip_audio(k, s)}[a{k}]")
     n = len(segs)
-    if n == 1:
+    dips = ""
+    if social:
+        g.f.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vc][acat]")
+    elif n == 1:
         g.f.append("[v0]null[vc]")
     else:
         g.f.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vc]")
         dips = _join_dips(segs, im.clip_transition, im.clip_transition_dur)
         if dips:
             g.f.append(f"[vc]{dips}[vcd]")
-    cur = "vcd" if n > 1 and dips else "vc"
+    cur = "vcd" if dips else "vc"
     if im.kenburns:
         g.f.append(f"[{cur}]{kenburns_filter(spec, W, H, t0)}[vk]")
         cur = "vk"
@@ -245,7 +278,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     # --- 3b. sottotitoli (libass), sopra tutto il resto del video principale
     sub = spec.subtitles
     fonts = Path(__file__).resolve().parent / "resources" / "fonts"
-    if sub.enabled and subtitles.write_ass(sub, t0, t1, W, H, workdir / "subs.ass", fonts):
+    if sub.enabled and subtitles.write_ass(sub, ranges, W, H, workdir / "subs.ass", fonts):
         g.f.append(f"[{cur}]ass=filename='{_fpath(workdir / 'subs.ass')}':fontsdir='{_fpath(fonts)}'[vsub]")
         cur = "vsub"
     elif sub.enabled:
@@ -262,10 +295,17 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
 
     # --- 5. audio principale
     voice = audio_fx.VoiceOptions(spec.audio.highpass, spec.audio.denoise, spec.audio.compressor)
-    a_in = g.inp("-i", p.audio)
-    achain = [audio_filter(p, t0)] + audio_fx.voice_chain(voice)
-    if spec.audio.loudnorm and loud:
-        achain.append(audio_fx.loudnorm_apply_filter(loud))
+    if social:
+        src = "[acat]"                                      # audio delle stesse clip, già tagliato insieme al video
+        achain = audio_fx.voice_chain(voice)
+        if spec.audio.loudnorm:
+            achain.append("loudnorm=I=-14:TP=-1.5:LRA=11")   # livello tipico dei social, in una sola passata
+    else:
+        a_in = g.inp("-i", p.audio)
+        src = f"[{a_in}:a:0]"
+        achain = [audio_filter(p, t0)] + audio_fx.voice_chain(voice)
+        if spec.audio.loudnorm and loud:
+            achain.append(audio_fx.loudnorm_apply_filter(loud))
     achain += [f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS", "aformat=sample_rates=48000:channel_layouts=stereo"]
     if im.fade_in > 0:
         achain.append(f"afade=t=in:st=0:d={im.fade_in:.3f}")
@@ -273,10 +313,10 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         achain.append(f"afade=t=out:st={max(0, D - im.fade_out):.3f}:d={im.fade_out:.3f}")
     music = spec.audio.music_path
     if music and Path(music).exists():
-        g.f.append(f"[{a_in}:a:0]{','.join(achain)}[vox]")
+        g.f.append(f"{src}{','.join(achain)}[vox]")
         _mix_music(g, spec, D, music)
     else:
-        g.f.append(f"[{a_in}:a:0]{','.join(achain)}[amain]")
+        g.f.append(f"{src}{','.join(achain)}[amain]")
 
     # --- 6. scene (titolo, outro, credito)
     seq: list[tuple[str, str, float, float, str]] = []   # (video, audio, durata, durata transizione dalla precedente, effetto)
