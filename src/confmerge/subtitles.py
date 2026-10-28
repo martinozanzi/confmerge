@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PySide6.QtGui import QFont, QFontMetricsF
 
-from .render.model import Box, Element, Fill, Outline, Shadow
+from .render.model import Anim, Box, Element, Fill, Outline, Shadow
 from .spec import SubLine, SubtitleSettings
 
 SAMPLE_TEXT = "Così si leggeranno i sottotitoli"
@@ -24,14 +24,32 @@ PRESETS: dict[str, dict] = {
                            shadow=True, box=False, uppercase=False),
     "Grande e centrato": dict(font="Anton", bold=False, size=0.075, color="#FFFFFF", outline=0.006,
                               outline_color="#000000", shadow=True, box=False, uppercase=True, position="middle"),
+    "Reel a blocchi": dict(font="Anton", bold=False, size=0.062, color="#FFFFFF", outline=0.007, outline_color="#000000",
+                           shadow=True, box=False, uppercase=True, position="middle", chunk_words=3, anim="pop"),
     "Leggero": dict(font="Inter", bold=False, size=0.04, color="#FFFFFF", outline=0.0, shadow=True, box=False,
                     uppercase=False),
 }
 
 
+PRESET_DEFAULTS = dict(position="bottom", chunk_words=0, anim="none", x=0.5, y=-1.0, box=False)
+ANIMS = {"none": "Nessuna", "fade": "Dissolvenza", "pop": "Pop (compare ingrandendosi)"}
+CHUNKS = {0: "Tutta la frase", 3: "3 parole per volta", 2: "2 parole per volta", 1: "Una parola per volta"}
+
+
 def apply_preset(st: SubtitleSettings, name: str) -> None:
-    for k, v in PRESETS[name].items():
+    for k, v in {**PRESET_DEFAULTS, **PRESETS[name]}.items():
         setattr(st, k, v)
+
+
+def chunked_lines(st: SubtitleSettings) -> list[SubLine]:
+    """Le righe come si vedono: con «poche parole per volta» ogni frase si spezza (il tempo si divide per lunghezza)."""
+    if st.chunk_words <= 0:
+        return list(st.lines)
+    from .transcribe import Line, split_words
+    out = []
+    for ln in st.lines:
+        out += [SubLine(x.start, x.end, x.text) for x in split_words([Line(ln.start, ln.end, ln.text)], st.chunk_words)]
+    return out
 
 
 def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = None) -> list[SubLine]:
@@ -40,7 +58,7 @@ def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = N
     ranges = t0 if isinstance(t0, list) else [(t0, t1)]
     from . import edl
     out = []
-    for ln in st.lines:
+    for ln in chunked_lines(st):
         if not ln.text.strip():
             continue
         for a, b in edl.remap_span(ranges, ln.start, ln.end):
@@ -51,7 +69,7 @@ def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = N
 
 
 def active_line(st: SubtitleSettings, t_project: float) -> SubLine | None:
-    for ln in st.lines:
+    for ln in chunked_lines(st):
         if ln.start <= t_project < ln.end:
             return ln
     return None
@@ -169,9 +187,12 @@ def to_ass(st: SubtitleSettings, t0: float | list, t1: float | None, W: int, H: 
         f"&H80000000,{-1 if st.bold else 0},0,0,0,100,100,0,0,{border},{border_w:.2f},{shadow:.2f},{align},"
         f"{ml},{ml},{mv},1\n\n[Events]\nFormat: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
     body = []
+    free = f"{{\\an5\\pos({st.x * W:.1f},{st.y * H:.1f})}}" if st.y >= 0 else ""    # trascinati a mano: posizione esatta
+    free += {"fade": "{\\fad(140,90)}",
+             "pop": "{\\fscx72\\fscy72\\t(0,130,\\fscx108\\fscy108)\\t(130,220,\\fscx100\\fscy100)\\fad(60,60)}"}.get(st.anim, "")
     for ln in effective_lines(st, t0, t1):
         clean = ln.text.replace("\\", "").replace("{", "(").replace("}", ")")
-        txt = wrap_text(st, clean, W, H).replace("\n", "\\N")       # a capo deciso qui: uguale all'anteprima
+        txt = free + wrap_text(st, clean, W, H).replace("\n", "\\N")       # a capo deciso qui: uguale all'anteprima
         body.append(f"Dialogue: 0,{_ass_time(ln.start)},{_ass_time(ln.end)},Default,,0,0,0,,{txt}")
     return head + "\n".join(body) + "\n"
 
@@ -214,6 +235,7 @@ def effective_margin(st: SubtitleSettings, safe: list | tuple | None = None) -> 
 
 
 def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list | tuple | None = None) -> Element:
+    """L'elemento che disegna il sottotitolo: anteprima e trascinamento. L'animazione d'entrata parte a t = 0."""
     wrapped = wrap_text(st, text, W, H)
     n = wrapped.count("\n") + 1
     margin = effective_margin(st, safe)
@@ -223,8 +245,12 @@ def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list 
         y -= h_frac / 2
     elif st.position == "top":
         y += h_frac / 2
+    x = 0.5
+    if st.y >= 0:
+        x, y = st.x, st.y
     return Element(
-        id="__subtitle", kind="text", text=wrapped, font=st.font, size=st.size, bold=st.bold, x=0.5, y=y,
+        id="__subtitle", kind="text", text=wrapped, font=st.font, size=st.size, bold=st.bold, x=x, y=y,
         align="center", fill=Fill(color=st.color), outline=Outline(st.outline, st.outline_color),
         shadow=Shadow(enabled=st.shadow and not st.box, color="#000000", blur=0.004, distance=0.004, opacity=0.7),
-        box=Box(enabled=st.box, color=st.box_color, opacity=st.box_opacity, padding=0.012, radius=0.006))
+        box=Box(enabled=st.box, color=st.box_color, opacity=st.box_opacity, padding=0.012, radius=0.006),
+        anim_in=Anim(kind=st.anim if st.anim in ("fade", "pop") else "none", duration=0.2, easing="back"))

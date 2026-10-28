@@ -30,6 +30,36 @@ class SubtitleCard(Card):
             self.style.addItem(n, n)
         self.style.currentIndexChanged.connect(self._preset)
         self.add(self.style)
+        # lingue: del video e dei sottotitoli (se diversa, si traduce)
+        from ..transcribe import LANGS
+        self.add(label("Lingua parlata nel video", ""))
+        self.src = QComboBox()
+        self.src.addItem("Riconosci da sola", "")
+        for c, n in LANGS:
+            self.src.addItem(n, c)
+        self.src.currentIndexChanged.connect(self._langs)
+        self.add(self.src)
+        self.add(label("Lingua dei sottotitoli", ""))
+        self.out = QComboBox()
+        self.out.addItem("La stessa del video", "")
+        for c, n in LANGS:
+            self.out.addItem(n, c)
+        self.out.setToolTip("Se scegli un'altra lingua, i sottotitoli vengono tradotti (costo trascurabile)")
+        self.out.currentIndexChanged.connect(self._langs)
+        self.add(self.out)
+        # come compaiono
+        self.add(label("Parole per volta", ""))
+        self.chunk = QComboBox()
+        for k, v in S.CHUNKS.items():
+            self.chunk.addItem(v, k)
+        self.chunk.currentIndexChanged.connect(self._chunk)
+        self.add(self.chunk)
+        self.add(label("Animazione", ""))
+        self.anim = QComboBox()
+        for k, v in S.ANIMS.items():
+            self.anim.addItem(v, k)
+        self.anim.currentIndexChanged.connect(self._anim)
+        self.add(self.anim)
         # grandezza
         self.size_lbl = label("", "", True)
         self.add(self.size_lbl)
@@ -99,6 +129,10 @@ class SubtitleCard(Card):
         self.margin.setValue(round(s.margin * 1000))
         self.margin.blockSignals(False)
         self.pos.setValue(s.position)
+        for cb, v in ((self.src, s.source_lang), (self.out, s.lang), (self.chunk, s.chunk_words), (self.anim, s.anim)):
+            cb.blockSignals(True)
+            cb.setCurrentIndex(max(0, cb.findData(v)))
+            cb.blockSignals(False)
         self._labels()
         self.make.setEnabled(not self.ctl.running and not why)
         self.make.setText("Crea di nuovo" if have else "Crea i sottotitoli")
@@ -142,14 +176,31 @@ class SubtitleCard(Card):
         self._labels()
         self._sample()
 
+    def _langs(self, _=0):
+        s = self.sub()
+        s.source_lang, s.lang = self.src.currentData(), self.out.currentData()
+        self.state.touch()
+
+    def _chunk(self, _=0):
+        self.sub().chunk_words = self.chunk.currentData()
+        self.sub().enabled = True
+        self._sample()
+
+    def _anim(self, _=0):
+        self.sub().anim = self.anim.currentData()
+        self.sub().enabled = True
+        self._sample()
+
     def _pos(self, v):
         self.sub().position = v
+        self.sub().x, self.sub().y = 0.5, -1.0                 # scegliere una posizione annulla il trascinamento
         self.sub().enabled = True
         self._labels()
         self._sample()
 
     def _margin(self, v: int):
         self.sub().margin = v / 1000
+        self.sub().x, self.sub().y = 0.5, -1.0
         self._labels()
         self._sample()
 

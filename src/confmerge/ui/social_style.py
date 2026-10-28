@@ -78,6 +78,10 @@ class OverlaysCard(Card):
             top.addWidget(bind.color(e.fill, "color", st.touch))
         else:
             top.addWidget(label(Path(e.path).name or "immagine", "", False), 1)
+        look = GhostButton("Aspetto…")
+        look.setToolTip("Carattere, colori, contorno, ombra, sfondo, animazione…")
+        look.clicked.connect(lambda _=False, el=e: self.customize(el))
+        top.addWidget(look)
         rm = GhostButton("Togli")
         rm.clicked.connect(lambda _=False, el=e: self.remove(el))
         top.addWidget(rm)
@@ -103,6 +107,27 @@ class OverlaysCard(Card):
         row.addWidget(sl, 1)
         box.lay.addLayout(row)
         return box
+
+    def customize(self, el: Element):
+        """Finestra con tutte le proprietà dell'elemento: l'anteprima dietro si aggiorna a ogni modifica."""
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+        from .element_editor import ElementEditor
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Aspetto del testo" if el.kind == "text" else "Aspetto dell'immagine")
+        dlg.resize(460, 640)
+        lay = QVBoxLayout(dlg)
+        ed = ElementEditor(show_targets=False)
+        from ..spec import output_size
+        ed.frame_wh = output_size(self.state.spec.image, self.state.spec.export)
+        ed.changed.connect(self.state.touch)
+        ed.set_element(el)
+        lay.addWidget(ed, 1)
+        bb = QDialogButtonBox(QDialogButtonBox.Close)
+        bb.rejected.connect(dlg.reject)
+        bb.accepted.connect(dlg.accept)
+        lay.addWidget(bb)
+        dlg.exec()
+        self.sync()
 
     def add_text(self):
         self.state.spec.graphics.elements.append(new_text(self.state))

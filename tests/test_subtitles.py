@@ -125,3 +125,22 @@ def test_subtitle_tab_builds_and_edits(qapp, tmp_path, monkeypatch):
     assert len(st.spec.subtitles.lines) == 2
     from confmerge.ui.subtitles_tab import fmt_t, parse_t
     assert parse_t("1:23,5") == 83.5 and parse_t("83") == 83.0 and parse_t("x") is None and fmt_t(83.5) == "1:23,5"
+
+
+def test_chunked_lines_and_animation_tags():
+    from confmerge import subtitles as S
+    from confmerge.spec import SubLine, SubtitleSettings
+    st = SubtitleSettings(lines=[SubLine(0, 4, "grande manifestazione di piazza a milano sabato")])
+    assert len(S.chunked_lines(st)) == 1
+    st.chunk_words = 3
+    ch = S.chunked_lines(st)
+    assert [c.text for c in ch] == ["grande manifestazione di", "piazza a milano", "sabato"][:len(ch)] or len(ch) == 2
+    assert all(len(c.text.split()) <= 4 for c in ch) and ch[0].start == 0 and abs(ch[-1].end - 4) < 1e-6
+    assert all(a.end == pytest.approx(b.start) for a, b in zip(ch, ch[1:]))
+    st.anim = "pop"
+    ass = S.to_ass(st, 0.0, 10.0, 720, 1280)
+    assert "\\fscx72" in ass and ass.count("Dialogue:") == len(ch)
+    S.apply_preset(st, "Reel a blocchi")
+    assert st.chunk_words == 3 and st.uppercase and st.anim == "pop"
+    S.apply_preset(st, "Classico")
+    assert st.chunk_words == 0 and st.anim == "none"

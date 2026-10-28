@@ -16,8 +16,9 @@ from pathlib import Path
 
 from .serde import from_dict
 
-ROLES = {"main": "Logo principale", "symbol": "Simbolo del partito o del movimento", "square": "Logo quadrato",
-         "wide": "Logo orizzontale", "other": "Altro"}
+ROLES = {"main": "Logo (nome + disegno)", "symbol": "Simbolo (solo icona o stemma)", "square": "Logo quadrato",
+         "wide": "Logo orizzontale", "other": "Altro (non va sul video)"}
+ROLE_SHORT = {"main": "Logo", "symbol": "Simbolo"}
 CORNERS = {"tl": "In alto a sinistra", "tr": "In alto a destra", "bl": "In basso a sinistra", "br": "In basso a destra"}
 COLOR_NAMES = {"primary": "Principale", "secondary": "Secondario", "accent": "Evidenza", "text": "Testo", "background": "Sfondo"}
 LOGO_EXT = {".png", ".svg", ".jpg", ".jpeg", ".webp"}

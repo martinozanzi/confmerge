@@ -321,16 +321,22 @@ class SocialLook(QWidget):
         self.player.canvas.social_edit = True
         self.player.canvas.itemSelected.connect(self._item_selected)
         self.player.canvas.itemsChanged.connect(self._items_changed)
-        pr = QHBoxLayout()
         self.sel_lbl = label("Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).", "caption", True)
-        pr.addWidget(self.sel_lbl, 1)
-        self.c_h = SecondaryButton("Centra in orizzontale")
-        self.c_v = SecondaryButton("Centra in verticale")
+        ll.addWidget(self.sel_lbl)
+        pr = QHBoxLayout()
+        self.c_ref = Segmented([("Area sicura", "safe"), ("Video intero", "video")])
+        self.c_ref.setToolTip("Rispetto a cosa centrare: l'area sicura (linea verde) o tutto il fotogramma")
+        pr.addWidget(self.c_ref)
+        self.c_h = SecondaryButton("Centra ↔")
+        self.c_v = SecondaryButton("Centra ↕")
+        self.c_h.setToolTip("Centra in orizzontale")
+        self.c_v.setToolTip("Centra in verticale")
         self.c_h.clicked.connect(lambda: self._center(True, False))
         self.c_v.clicked.connect(lambda: self._center(False, True))
         for b in (self.c_h, self.c_v):
             b.setEnabled(False)
             pr.addWidget(b)
+        pr.addStretch(1)
         ll.addLayout(pr)
         split.addWidget(left)
         panel = QWidget()
@@ -396,7 +402,7 @@ class SocialLook(QWidget):
     def _item_selected(self, kind: str, idx: int):
         from . import placement
         on = bool(kind)
-        self.c_h.setEnabled(on and kind != "sub")           # i sottotitoli sono già centrati in orizzontale
+        self.c_h.setEnabled(on)
         self.c_v.setEnabled(on)
         self.sel_lbl.setText(placement.label_of(self.state, kind, idx) if on
                              else "Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).")
@@ -411,7 +417,8 @@ class SocialLook(QWidget):
         if not cv.sel_item:
             return
         W, H = cv.frame_size()
-        placement.center(self.state, *cv.sel_item, W, H, h, v)
+        safe = cv.safe_common if self.c_ref.value() == "safe" else None
+        placement.center(self.state, *cv.sel_item, W, H, h, v, safe)
         cv.update()
         self._items_changed()
 
