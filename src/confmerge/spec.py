@@ -45,6 +45,9 @@ class ImageSettings:
     reframe: str = "fill"          # come entra un video orizzontale in un formato verticale: fill (ritaglia) | blur | bars
     reframe_x: float = 0.5         # fill: dove sta la finestra di ritaglio (0 = sinistra, 1 = destra)
     reframe_y: float = 0.5
+    vscale: float = 1.0            # Studio Social: grandezza del video nel fotogramma (>1 ingrandisce e ritaglia, <1 rimpicciolisce)
+    vx: float = 0.5                # dove sta il suo centro (frazione della larghezza / dell'altezza del riquadro)
+    vy: float = 0.5
 
 
 @dataclass
@@ -206,6 +209,10 @@ class SplitSettings:
     ratio: float = 0.5             # parte dell'altezza che va al riquadro in ALTO
     gap: float = 0.0               # linea nera fra i due riquadri (frazione dell'altezza)
     second_x: float = 0.5          # inquadratura del secondo video: 0 = sinistra, 1 = destra
+    second_y: float = 0.5          # … e 0 = in alto, 1 = in basso (si nota se è ingrandito)
+    second_scale: float = 1.0      # ≥ 1: ingrandisce il secondo video dentro il suo riquadro
+    mask: str = ""                 # forma del riquadro: "" rettangolo | rounded | circle
+    mask_radius: float = 0.15      # raggio degli angoli (frazione del lato corto); «circle» = massimo
     second_start: float = 0.0      # da quale secondo parte il secondo video
     second_audio: bool = False     # si sente anche l'audio del secondo video
     second_db: float = -12.0       # volume del secondo video rispetto al tuo (dB)
