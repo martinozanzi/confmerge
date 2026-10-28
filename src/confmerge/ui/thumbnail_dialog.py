@@ -194,6 +194,8 @@ class ThumbnailDialog(QDialog):
         if self.font_other:
             from PySide6.QtGui import QFont
             self.font_any.setCurrentFont(QFont(self.font_other))
+        self.font_any.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.font_any.setMinimumContentsLength(10)
         self.font_any.currentFontChanged.connect(self._font_other)
         fo.addWidget(self.font_any, 1)
         c2.lay.addLayout(fo)
@@ -258,8 +260,9 @@ class ThumbnailDialog(QDialog):
         row.addWidget(label(text))
         btn = bind.color(self.pal_over, attr, self._colors_changed)
         row.addWidget(btn)
-        rs = GhostButton("Come il layout")
+        rs = GhostButton("↺")
         rs.setToolTip("Torna al colore del layout o del marchio")
+        rs.setAccessibleName(f"Colore {text}: come il layout")
         rs.clicked.connect(lambda _=False, a=attr, b=btn: (setattr(self.pal_over, a, ""), b.setStyleSheet(""), self._colors_changed()))
         row.addWidget(rs)
         row.addStretch(1)
@@ -294,15 +297,12 @@ class ThumbnailDialog(QDialog):
         c.add(label("Testi e immagini in più", "h2", True))
         c.add(label("Aggiungi un bollino, un logo o una scritta e trascinali sull'anteprima. Le immagini PNG possono avere lo sfondo "
                     "trasparente.", "caption", True))
-        r = QHBoxLayout()
         a = SecondaryButton("Aggiungi un testo", "type")
         a.clicked.connect(self._add_text)
         b = SecondaryButton("Aggiungi un'immagine…", "image-plus")
         b.clicked.connect(self._add_image)
-        r.addWidget(a)
-        r.addWidget(b)
-        r.addStretch(1)
-        c.lay.addLayout(r)
+        c.add(a)                                                   # uno sotto l'altro: nei pannelli stretti non allargano la scheda
+        c.add(b)
         self.extra_rows = QVBoxLayout()
         c.lay.addLayout(self.extra_rows)
         self._fill_extras()
