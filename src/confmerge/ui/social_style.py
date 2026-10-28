@@ -14,7 +14,7 @@ from ..render.anchors import ANCHORS
 from ..render.model import Element, Fill, Outline, Shadow
 from ..render.text_renderer import is_video_overlay
 from . import bind
-from .widgets import Card, GhostButton, SecondaryButton, label
+from .widgets import Card, GhostButton, IconButton, SecondaryButton, label
 
 
 def new_text(state, anchor: str = "tc") -> Element:
@@ -37,10 +37,9 @@ class OverlaysCard(Card):
         self.rows = QVBoxLayout()
         self.lay.addLayout(self.rows)
         r = QHBoxLayout()
-        a = SecondaryButton("Aggiungi un testo", "type")
+        a = SecondaryButton("Testo", "type", "Aggiungi un testo")
         a.clicked.connect(self.add_text)
-        b = SecondaryButton("Aggiungi un overlay…", "image-plus")
-        b.setToolTip("Immagine o video, anche con sfondo trasparente")
+        b = SecondaryButton("Overlay…", "image-plus", "Aggiungi un'immagine o un video, anche con sfondo trasparente")
         b.clicked.connect(self.add_image)
         r.addWidget(a)
         r.addWidget(b)
@@ -121,18 +120,15 @@ class OverlaysCard(Card):
             ed = QLineEdit(e.text)
             ed.textEdited.connect(lambda t, el=e: (setattr(el, "text", t), st.touch()))
             top.addWidget(ed, 1)
-            top.addWidget(bind.color(e.fill, "color", st.touch))
         else:
             top.addWidget(label(Path(e.path).name or "immagine", "", False), 1)
-        keep = GhostButton("Salva")
-        keep.setToolTip("Salva questo overlay per riusarlo in altri lavori")
+        keep = IconButton("save", "Salva questo overlay per riusarlo in altri lavori")
         keep.clicked.connect(lambda _=False, el=e: self.save_element(el))
         top.addWidget(keep)
-        look = GhostButton("Aspetto…")
-        look.setToolTip("Carattere, colori, contorno, ombra, sfondo, animazione…")
+        look = IconButton("sliders-horizontal", "Stile: carattere, colori, contorno, ombra, sfondo, animazione…")
         look.clicked.connect(lambda _=False, el=e: self.customize(el))
         top.addWidget(look)
-        rm = GhostButton("Togli")
+        rm = IconButton("trash-2", "Togli dal video")
         rm.clicked.connect(lambda _=False, el=e: self.remove(el))
         top.addWidget(rm)
         box.lay.addLayout(top)
@@ -217,7 +213,7 @@ class StyleTemplateCard(Card):
         self.combo.activated.connect(self._applied)
         self.add(self.combo)
         r = QHBoxLayout()
-        sv = SecondaryButton("Salva lo stile attuale…", "save")
+        sv = SecondaryButton("Salva lo stile…", "save", "Salva lo stile di questo lavoro come modello")
         sv.clicked.connect(self.save)
         dl = GhostButton("Elimina")
         dl.clicked.connect(self.delete)

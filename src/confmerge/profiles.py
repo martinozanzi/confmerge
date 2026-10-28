@@ -61,8 +61,8 @@ def starter_profile() -> dict:
     from .render.model import LowerThird
     spec = RenderSpec()
     from . import templates
-    spec.graphics.title = templates.get("title", "aurora").build()
-    spec.graphics.title_template = "aurora"
+    spec.graphics.title = templates.get("title", "editorial").build()
+    spec.graphics.title_template = "editorial"
     spec.graphics.transition_style = "fade"
     spec.graphics.lower_thirds = [LowerThird(name="{relatore}", role="{ruolo}", start=10.0, duration=6.0, style="pill")]
     return profile_from_spec(spec)

@@ -23,15 +23,17 @@ from .thumbnail_dialog import ThumbnailDialog
 from .waveform import WaveformWidget
 from .brand_card import BrandCard
 from .music_card import MusicCard
+from .preview_button import PreviewButton
 from .subtitles_tab import SimpleSubtitlesCard
 from .template_gallery import VariablesForm
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, ProgressRing, SecondaryButton,
-                      StepIndicator, Toggle, label)
+                      FlowBar, StepIndicator, Toggle, label)
 from .widgets.anim import fade_in, stagger_cards
 
 MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre",
           "novembre", "dicembre"]
-STEPS = ["Cartella", "Controlla", "Esporta"]
+STEPS = ["Cartella", "Sincronia", "Inizio e fine", "Titoli", "Sottotitoli", "Audio", "Esporta"]
+EXPORT_STEP = 6                                        # passi 1…5 sono i pannelli di SimpleCheck, 6 è l'esportazione
 
 
 def italian_date(dt) -> str:
@@ -49,6 +51,7 @@ def used_variables(spec: RenderSpec) -> list[str]:
 # ------------------------------------------------------------------------------------------------------------ 1. cartella
 class SimpleStart(QWidget):
     started = Signal()
+    picked = Signal(object)          # file o cartelle scelti: li smista la finestra (riconosce conferenza o social)
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
@@ -61,8 +64,9 @@ class SimpleStart(QWidget):
         pick = QWidget()
         pl = QVBoxLayout(pick)
         pl.setAlignment(Qt.AlignCenter)
-        self.drop = DropZone("Trascina qui la cartella della conferenza",
-                             "Dentro devono esserci i video della telecamera e la registrazione audio.", "Sfoglia…")
+        self.drop = DropZone("Trascina qui i tuoi video o la cartella",
+                             "Riconosco da solo se è una conferenza (video + registrazione audio) o un video per i social.",
+                             "Sfoglia…")
         self.drop.setMinimumHeight(300)
         self.drop.setMinimumWidth(620)
         self.drop.setMaximumWidth(820)
@@ -124,39 +128,41 @@ class SimpleStart(QWidget):
             self.recent_lay.addWidget(label("Ultime cartelle usate", "caption"), 0, Qt.AlignHCenter)
             for r in recents:
                 b = LinkButton(Path(r).name or r, r)
-                b.clicked.connect(lambda _=False, rr=r: self.use_folder(Path(rr)))
+                b.clicked.connect(lambda _=False, rr=r: self.picked.emit([Path(rr)]))
                 self.recent_lay.addWidget(b, 0, Qt.AlignHCenter)
 
     def browse(self):
-        d = QFileDialog.getExistingDirectory(self, "Cartella della conferenza", self.state.settings.data.get("last_folder", ""))
+        d = QFileDialog.getExistingDirectory(self, "Cartella con i video", self.state.settings.data.get("last_folder", ""))
         if d:
-            self.use_folder(Path(d))
+            self.picked.emit([Path(d)])
 
     def _dropped(self, items):
-        folder = next((p for p in items if p.is_dir()), None)
-        if folder:
-            self.use_folder(folder)
-        elif items:
-            self.use_folder(items[0].parent)
+        self.picked.emit([Path(p) for p in items])
 
     def use_folder(self, folder: Path):
+        self.use_paths([folder])
+
+    def use_paths(self, items: list[Path]):
+        """Carica i file o la cartella scelti (arrivano già riconosciuti come conferenza dalla finestra)."""
         m = self.state.sources
         self.problem.setText("")
         self.audio_btn.setVisible(False)
+        folder = next((Path(p) for p in items if Path(p).is_dir()), None)
         try:
             m.clear()
-            m.load_folder(folder)
+            folder = m.accept_paths([Path(p) for p in items]) or folder
         except Exception as e:  # noqa: BLE001
-            self.problem.setText(f"Non riesco a leggere questa cartella: {e}")
+            self.problem.setText(f"Non riesco a leggere questi file: {e}")
             return
-        s = self.state.settings
-        s.data["last_folder"] = str(folder)
-        rec = [r for r in s.data.get("recent_folders", []) if r != str(folder)]
-        s.data["recent_folders"] = [str(folder)] + rec[:4]
-        s.save()
+        if folder:
+            s = self.state.settings
+            s.data["last_folder"] = str(folder)
+            rec = [r for r in s.data.get("recent_folders", []) if r != str(folder)]
+            s.data["recent_folders"] = [str(folder)] + rec[:4]
+            s.save()
         self.render_recent()
         if not m.videos:
-            self.problem.setText("In questa cartella non ho trovato video (file .mp4 o .mov). Prova con un'altra cartella.")
+            self.problem.setText("Non ho trovato video (file .mp4 o .mov). Prova con un'altra cartella o altri file.")
             return
         if not m.audio:
             self.problem.setText("Ho trovato i video ma non la registrazione audio (mp3, wav, m4a…). Scegli il file qui sotto.")
@@ -214,9 +220,7 @@ class SimpleCheck(QWidget):
         super().__init__(parent)
         self.state = state
         main = QVBoxLayout(self)
-        main.addWidget(label("Controlla", "title"))
-        main.addWidget(label("Guarda il video, controlla che voce e labbra coincidano e conferma dove inizia e finisce "
-                             "la conferenza.", "muted", True))
+        main.setContentsMargins(0, 0, 0, 0)
         split = QSplitter(Qt.Horizontal)
         left = QWidget()
         ll = QVBoxLayout(left)
@@ -226,32 +230,71 @@ class SimpleCheck(QWidget):
         self.wave = WaveformWidget()
         self.wave.setMinimumHeight(100)
         ll.addWidget(self.wave)
-        ll.addWidget(label("Le barre verde e rossa sono l'inizio e la fine. Puoi trascinarle.", "caption", True))
+        hr = QHBoxLayout()
+        hr.addWidget(label("Barre verde e rossa: inizio e fine (trascinabili).", "caption", True), 1)
+        self.preview = PreviewButton(state, lambda: self.player.position())
+        hr.addWidget(self.preview)
+        ll.addLayout(hr)
         split.addWidget(left)
-        sa = QScrollArea()
-        sa.setWidgetResizable(True)
-        sa.setFrameShape(QScrollArea.NoFrame)
-        sa.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        sa.setMinimumWidth(475)
-        right = QWidget()
-        rl = QVBoxLayout(right)
-        rl.setSpacing(S2)
+        # --- pannelli: uno per passo, senza scorrimento (portatile 1366×768)
+        self.panels = QStackedWidget()
         self.sync = SyncPanel(state, self.player, simple=True)
         self.trim = TrimPanel(state, self.player, self.wave, simple=True)
-        rl.addWidget(self.sync)
-        rl.addWidget(self.trim)
-        rl.addWidget(self._profile_card())
-        rl.addStretch(1)
-        sa.setWidget(right)
-        split.addWidget(sa)
-        split.setStretchFactor(0, 5)
-        split.setStretchFactor(1, 3)
-        split.setSizes([620, 480])
+        self.panels.addWidget(self._page("Sincronia", "Guarda il video e controlla che la voce coincida con le labbra.", self.sync))
+        self.panels.addWidget(self._page("Dove inizia e finisce", "Conferma l'inizio e la fine della conferenza.", self.trim))
+        self.panels.addWidget(self._titles_page())
+        self.subs_card = SimpleSubtitlesCard(state, self._open_settings, wide=True)
+        self.panels.addWidget(self._page("Sottotitoli", "Scrivili con l'intelligenza artificiale e provali nell'anteprima "
+                                         "prima di esportare.", self.subs_card))
+        self.audio_card = MusicCard(state)
+        self.loud = Toggle("Volume uniforme per YouTube")
+        self.loud.setChecked(state.spec.audio.loudnorm)
+        self.loud.toggled.connect(lambda on: (setattr(state.spec.audio, "loudnorm", on), state.touch()))
+        loud_card = Card()
+        loud_card.add(self.loud)
+        loud_card.add(label("La voce avrà sempre un livello giusto: né troppo bassa né troppo alta.", "caption", True))
+        self.panels.addWidget(self._page("Audio", "Musica di sottofondo e volume.", self.audio_card, loud_card))
+        self.panels.setMinimumWidth(475)
+        split.addWidget(self.panels)
+        split.setStretchFactor(0, 4)
+        split.setStretchFactor(1, 4)
+        split.setSizes([560, 640])
         main.addWidget(split, 1)
         self.binder = PreviewBinder(state, self.player, self.wave)
         state.project_changed.connect(self._on_project)
         state.profile_changed.connect(self._build_fields)
         state.spec_changed.connect(self._refresh_previews)
+
+    def _page(self, title: str, desc: str, *cards) -> QWidget:
+        """Un pannello: titolo e frase, poi le schede una sotto l'altra."""
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(S2)
+        lay.addWidget(label(title, "h2"))
+        lay.addWidget(label(desc, "caption", True))
+        for c in cards:
+            lay.addWidget(c)
+        lay.addStretch(1)
+        from .graphics_page import scrolled
+        sa = scrolled(w)                                      # scorre solo se il testo è molto grande: normalmente sta tutto
+        sa.setMinimumWidth(max(440, w.minimumSizeHint().width() + 40))
+        return sa
+
+    def set_panel(self, i: int) -> None:
+        self.panels.setCurrentIndex(max(0, min(self.panels.count() - 1, i)))
+
+    def _open_settings(self):
+        w = self.window()
+        if hasattr(w, "settings_dialog"):
+            w.settings_dialog()
+            self.subs_card.refresh()
+
+    def _titles_page(self) -> QWidget:
+        """Titoli e grafica in due colonne: a sinistra profilo e testi da compilare, a destra le anteprime e gli stili."""
+        c = self._profile_card()
+        return self._page("Titoli e grafica", "Il profilo decide titolo iniziale, logo, scritte e credito. Vedi subito "
+                          "come vengono, anche prima di scrivere.", c)
 
     # --- scheda profilo: titolo, logo finale e testi da compilare
     def _profile_card(self) -> Card:
@@ -362,6 +405,9 @@ class SimpleCheck(QWidget):
         used = used_variables(self.state.spec)
         if not used:
             self.fields_lay.addWidget(label("Questo profilo non ha testi da compilare.", "caption", True))
+        else:
+            self.fields_lay.addWidget(label("Finché un campo è vuoto, nell'anteprima vedi un testo d'esempio: scrivi il tuo e "
+                                            "lo vedi subito.", "caption", True))
         for k in used:
             self.fields_lay.addWidget(label(VARIABLES[k]))
             e = QLineEdit(self.state.spec.variables.get(k, ""))
@@ -478,16 +524,11 @@ class SimpleExport(QWidget):
     # --- opzioni
     def _options(self) -> QWidget:
         w = QWidget()
-        sa = QScrollArea()
-        sa.setWidgetResizable(True)
-        sa.setFrameShape(QScrollArea.NoFrame)
-        inner = QWidget()
-        sa.setWidget(inner)
-        lay = QVBoxLayout(inner)
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(S2)
-        lay.addWidget(label("Esporta", "title"))
-        lay.addWidget(label("Scegli la qualità e premi «Esporta»: il programma prepara il video pronto da caricare su YouTube.",
-                            "muted", True))
+        lay.addWidget(label("Scegli la qualità e premi «Esporta il video»: il programma prepara il video pronto da caricare su YouTube.",
+                            "caption", True))
         row = QHBoxLayout()
         row.setSpacing(S2)
         self.q_cards: dict[str, QualityCard] = {}
@@ -497,15 +538,7 @@ class SimpleExport(QWidget):
             row.addWidget(qc)
             self.q_cards[key] = qc
         lay.addLayout(row)
-        self.subs_card = SimpleSubtitlesCard(self.state, self._open_settings)
-        lay.addWidget(self.subs_card)
-        lay.addWidget(MusicCard(self.state))
         opts = Card()
-        self.loud = Toggle("Volume uniforme per YouTube")
-        self.loud.setChecked(self.state.spec.audio.loudnorm)
-        self.loud.toggled.connect(lambda on: (setattr(self.state.spec.audio, "loudnorm", on), self.state.touch()))
-        opts.add(self.loud)
-        opts.add(label("La voce avrà sempre un livello giusto: né troppo bassa né troppo alta.", "caption", True))
         r = QHBoxLayout()
         r.addWidget(label("Dove salvarlo:"))
         self.dir_edit = QLineEdit(self.state.spec.export.out_dir)
@@ -530,19 +563,11 @@ class SimpleExport(QWidget):
         est.add(self.est_small)
         self.est_warn = label("", "warn", True)
         est.add(self.est_warn)
+        self.preview = PreviewButton(self.state, lambda: self.check.player.position(), text="Guarda 10 secondi prima di esportare")
+        est.add(self.preview)
         lay.addWidget(est)
         lay.addStretch(1)
-        wl = QVBoxLayout(w)
-        wl.setContentsMargins(0, 0, 0, 0)
-        wl.addWidget(sa)
         return w
-
-    def _open_settings(self):
-        w = self.window()
-        if hasattr(w, "settings_dialog"):
-            w.settings_dialog()
-            for c in (self.subs_card,):
-                c.refresh()
 
     def _pick_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Dove salvare il video", self.dir_edit.text())
@@ -565,14 +590,12 @@ class SimpleExport(QWidget):
             self.dir_edit.setText(str(Path(pr.clips[0]).parent))
         if self.state.spec.export.name in ("", "conferenza"):
             self.name_edit.setText(Path(pr.clips[0]).parent.name or "conferenza")
-        self.loud.setChecked(self.state.spec.audio.loudnorm)
         self._mark(current_quality(self.state))
 
     def showEvent(self, e):
         super().showEvent(e)
         self.ctl.active = True
         self._mark(current_quality(self.state))
-        self.loud.setChecked(self.state.spec.audio.loudnorm)
         self.ctl.run_estimate()
         stagger_cards(self)
 
@@ -703,16 +726,15 @@ class SimpleShell(QWidget):
         self.state = state
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 12, 24, 12)
-        top = QHBoxLayout()
-        self.steps = StepIndicator(STEPS)
-        self.steps.setMaximumWidth(620)
-        top.addStretch(1)
-        top.addWidget(self.steps, 3)
-        top.addStretch(1)
+        self.flow = FlowBar(STEPS)                         # passi cliccabili + Indietro/Avanti in alto
+        self.steps, self.back, self.next = self.flow.steps, self.flow.back, self.flow.next
         more = LinkButton("Più opzioni", "Passa alla modalità Avanzata con lo stesso progetto")
         more.clicked.connect(self.moreOptions)
-        top.addWidget(more)
-        lay.addLayout(top)
+        self.flow.extra.addWidget(more)
+        self.steps.clicked.connect(self.goto)
+        lay.addWidget(self.flow)
+        self.hint = label("", "caption", True)
+        lay.addWidget(self.hint)
         self.stack = QStackedWidget()
         self.start = SimpleStart(state)
         self.check = SimpleCheck(state)
@@ -720,35 +742,41 @@ class SimpleShell(QWidget):
         for w in (self.start, self.check, self.export):
             self.stack.addWidget(w)
         lay.addWidget(self.stack, 1)
-        nav = QHBoxLayout()
-        self.back = SecondaryButton("Indietro", "chevron-left")
-        self.next = PrimaryButton("Avanti", "chevron-right")
-        self.hint = label("", "caption", True)
         self.back.clicked.connect(self.go_back)
         self.next.clicked.connect(self.go_next)
-        nav.addWidget(self.back)
-        nav.addWidget(self.hint, 1)
-        nav.addWidget(self.next)
-        lay.addLayout(nav)
         state.analysis.finished.connect(lambda: self.show_step(1))
         state.review.trimChanged.connect(self._gate)
         state.project_changed.connect(self._gate)
         self.export.newProject.connect(self.newProject)
         self.export.stack.currentChanged.connect(lambda _: self._gate())
+        self._step = 0
         self.show_step(0, animate=False)
 
     @property
     def step(self) -> int:
-        return self.stack.currentIndex()
+        return self._step
+
+    def _confirmed(self) -> bool:
+        pr = self.state.project
+        return bool(pr and pr.trim_confirmed)
 
     def show_step(self, i: int, animate: bool = True) -> None:
-        self.stack.setCurrentIndex(i)
+        i = max(0, min(EXPORT_STEP, i))
+        if i > 0 and not self.state.project:
+            i = 0
+        if i > 2 and not self._confirmed():                  # prima si conferma dove inizia e finisce
+            i = 2
+        self._step = i
+        self.stack.setCurrentIndex(0 if i == 0 else 2 if i == EXPORT_STEP else 1)
+        if 1 <= i < EXPORT_STEP:
+            self.check.set_panel(i - 1)
         self.steps.set_state(i)
-        self.back.setVisible(i in (1, 2))
-        self.next.setVisible(i in (1, 2))
-        self.next.setText("Esporta il video" if i == 2 else "Avanti")
-        self.next.set_icon("download" if i == 2 else "chevron-right")
-        self.next.setMinimumHeight(48 if i == 2 else 0)
+        last = i == EXPORT_STEP
+        self.back.setVisible(i > 0)
+        self.next.setVisible(i > 0)
+        self.next.setText("Esporta il video" if last else "Avanti")
+        self.next.set_icon("download" if last else "chevron-right")
+        self.next.setMinimumHeight(40)
         self._gate()
         if animate:
             fade_in(self.stack.currentWidget(), slide=12)
@@ -756,27 +784,42 @@ class SimpleShell(QWidget):
         if i == 0:
             self.start.render_recent()
 
-    def _gate(self):
+    def goto(self, i: int) -> None:
+        """Clic su un passo: si può tornare indietro sempre, andare avanti solo se quello che serve è pronto."""
+        if i == self.step or (i > 0 and not self.state.project):
+            return
+        if self.step == EXPORT_STEP and i < EXPORT_STEP:
+            self.export.reset()
+        self.show_step(i)
+
+    def _reach(self) -> int:
         pr = self.state.project
-        ok = bool(pr and pr.trim_confirmed)
-        if self.step == 2:
+        return EXPORT_STEP if self._confirmed() else 2 if pr else 0
+
+    def _gate(self):
+        self.steps.set_reach(self._reach())
+        ok = self._confirmed()
+        if self.step == EXPORT_STEP:
             self.next.setVisible(self.export.stack.currentIndex() == 0)
             self.next.setEnabled(True)
             self.hint.setText("")
+            self.hint.setVisible(False)
             return
-        self.next.setEnabled(ok)
-        self.hint.setText("" if self.step != 1 or ok else "Per andare avanti, conferma prima inizio e fine (nel riquadro «Dove inizia e finisce»).")
+        self.next.setEnabled(bool(self.state.project) and (self.step != 2 or ok))
+        need = self.step == 2 and not ok
+        self.hint.setText("Per andare avanti, conferma prima inizio e fine (nel riquadro «Dove inizia e finisce»)." if need else "")
+        self.hint.setVisible(need)
 
     def go_back(self):
-        if self.step == 2:
+        if self.step == EXPORT_STEP:
             self.export.reset()
         self.show_step(max(0, self.step - 1))
 
     def go_next(self):
-        if self.step == 1 and self.next.isEnabled():
-            self.show_step(2)
-        elif self.step == 2:
+        if self.step == EXPORT_STEP:
             self.export._export()
+        elif self.next.isEnabled():
+            self.show_step(self.step + 1)
 
     def reset(self):
         self.start.reset()

@@ -31,9 +31,8 @@ class AudioPage(QWidget):
         super().__init__(parent)
         self.state = state
         lay = QVBoxLayout(self)
-        lay.addWidget(label("Audio", "title"))
         lay.addWidget(label("La registrazione esterna sostituisce l'audio della telecamera. Qui scegli come migliorarla.",
-                            "muted", True))
+                            "caption", True))
         card = Card()
         a = state.spec.audio
         self._toggles = []

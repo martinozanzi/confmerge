@@ -30,6 +30,7 @@ def source_lines(model) -> list[str]:
 
 
 class SelectPage(QWidget):
+    picked = Signal(object)          # file o cartelle trascinati: li smista la finestra (riconosce conferenza o social)
     ready = Signal(bool)
     analyzeRequested = Signal()
 
@@ -39,9 +40,8 @@ class SelectPage(QWidget):
         self.model = state.sources
         self.setAcceptDrops(True)
         lay = QVBoxLayout(self)
-        lay.addWidget(label("Sorgenti", "title"))
         lay.addWidget(label("Scegli la cartella della conferenza (il programma trova da solo video, audio e slide) "
-                            "oppure aggiungi i file a mano. Puoi anche trascinarli qui.", "muted", True))
+                            "oppure aggiungi i file a mano. Puoi anche trascinarli qui.", "caption", True))
         row = QHBoxLayout()
         row.setSpacing(S1)
         b = PrimaryButton("Scegli la cartella…", "folder-open")
@@ -146,9 +146,11 @@ class SelectPage(QWidget):
             e.acceptProposedAction()
 
     def dropEvent(self, e):
-        folder = self.model.accept_paths([Path(u.toLocalFile()) for u in e.mimeData().urls()])
-        if folder:
-            self.state.settings.data["last_folder"] = str(folder)
+        self.picked.emit([Path(u.toLocalFile()) for u in e.mimeData().urls()])
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.render()                # mostra sempre ciò che è stato caricato, anche da Semplice o da Social
 
     # --- vista
     def render(self):

@@ -93,6 +93,10 @@ class MainWindow(QMainWindow):
         self.simple.newProject.connect(self.new)
         self.social.newProject.connect(self.new)
         self.home.chosen.connect(self.set_app)
+        self.selection: list[Path] = []                      # i file scelti: uno solo per tutti gli strumenti
+        self.simple.start.picked.connect(self.open_sources)
+        self.adv.picked.connect(self.open_sources)
+        self.social.start.picked.connect(self.open_sources)
         self.social_state.project_changed.connect(self._project_changed)
         self.social_state.spec_changed.connect(self._history_buttons)
         self.social_state.profile_changed.connect(self._history_buttons)
@@ -143,7 +147,7 @@ class MainWindow(QMainWindow):
         row.addSpacing(S2)
         self.app_seg = Segmented([("Social", "social"), ("Conferenze", "merge")],
                                  icons=["scissors", "film"])
-        self.app_seg.changed.connect(self.set_app)
+        self.app_seg.changed.connect(self.switch_tool)
         self.app_seg.setToolTip("Social: Studio Social, video pronti per le piattaforme. Conferenze: Merge Conferenze, per unire riprese e audio esterno.")
         row.addWidget(self.app_seg)
         row.addSpacing(S2)
@@ -226,6 +230,38 @@ class MainWindow(QMainWindow):
     @property
     def active_state(self) -> AppState:
         return self.social_state if self.app == "social" else self.state
+
+    def open_sources(self, items, kind: str | None = None) -> None:
+        """Unico punto d'ingresso dei file: riconosce se è una conferenza o un video social e apre lo strumento giusto."""
+        from .. import detect
+        det = detect.classify(items)
+        start = self.social.start if self.app == "social" else self.simple.start
+        if not det.kind:
+            start.problem.setText(det.reason + " Trascina video (mp4, mov) o la cartella che li contiene.")
+            return
+        kind = kind or det.kind
+        target = self.social_state if kind == "social" else self.state
+        if target.project and not self.confirm_discard(only=target):
+            return
+        self.selection = [Path(p) for p in det.sources]
+        if kind != self.app:
+            self.set_app(kind)
+        if kind == "social":
+            self.social.start.start(det.videos)
+        else:
+            self.simple.start.use_paths(det.sources)          # la pagina Sorgenti dell'Avanzata si aggiorna da sola
+        toast(self, det.reason if kind == det.kind else
+              ("Uso gli stessi file come conferenza." if kind == "merge" else "Uso gli stessi file come video social."), "info")
+
+    def switch_tool(self, app: str) -> None:
+        """Dal selettore in alto: cambia strumento tenendo gli stessi file (una sola selezione per tutti)."""
+        if app == self.app:
+            return
+        self.set_app(app)
+        st = self.active_state
+        busy = st.social.running if app == "social" else st.analysis.running
+        if self.selection and not st.project and not busy:
+            self.open_sources(self.selection, kind=app)
 
     def set_app(self, app: str, animate: bool = True, remember: bool = True) -> None:
         """Cambia strumento: Studio Social o Merge Conferenze (ognuno tiene il suo lavoro)."""
@@ -392,6 +428,7 @@ class MainWindow(QMainWindow):
             return
         st.project = None
         st.project_path = None
+        self.selection = []
         if st.kind == "social":
             self.social.reset()
         else:

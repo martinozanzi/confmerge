@@ -228,3 +228,30 @@ def test_overlay_library_roundtrip_and_ui(qapp, tmp_path, monkeypatch):
 def test_gif_and_webm_overlays_become_clip_elements(qapp):
     from confmerge.render.text_renderer import is_video_overlay
     assert all(is_video_overlay(f"a{e}") for e in (".gif", ".WEBM", ".mov")) and not is_video_overlay("a.png")
+
+
+def test_previews_show_example_text_until_you_write_yours(qapp):
+    from confmerge import templates as T
+    from confmerge.ui.canvas import Canvas
+    from confmerge.ui.state import AppState
+    pv = T.preview_variables({"titolo": "  ", "relatore": "Anna Verdi", "data": ""})
+    assert pv["titolo"] == T.SAMPLE["titolo"] and pv["relatore"] == "Anna Verdi" and pv["data"] == T.SAMPLE["data"]
+    st = AppState(kind="social")
+    T.apply_title(st.spec, "vlog")
+    cv = Canvas(st)
+    cv.mode, cv.scene, cv.scene_target = "scene", st.spec.graphics.title, "title"
+    texts = " ".join(e.text for e in cv._scene_elements() if e.kind == "text")
+    assert T.SAMPLE["titolo"] in texts and "{titolo}" not in texts                # esempio, non il segnaposto vuoto
+    st.spec.variables["titolo"] = "Il mio titolo"
+    texts = " ".join(e.text for e in cv._scene_elements() if e.kind == "text")
+    assert "Il mio titolo" in texts
+
+
+def test_modern_templates_are_first_and_render(qapp):
+    from confmerge import templates as T
+    from confmerge.ui import template_gallery as G
+    assert [t.id for t in T.TITLES[:6]] == ["vlog", "kinetic", "glass", "editorial", "outline", "punch"]
+    assert T.LOWER_THIRDS[0].id == "glass" and T.OUTROS[0].id == "endscreen"
+    for k, tid in (("title", "vlog"), ("title", "kinetic"), ("lower_third", "block"), ("outro", "endscreen")):
+        img = G.render_template(T.get(k, tid), 320, 180)
+        assert not img.isNull() and img.width() == 320

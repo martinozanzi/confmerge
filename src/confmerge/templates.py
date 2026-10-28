@@ -14,6 +14,12 @@ SAMPLE = {"titolo": "Il titolo del tuo video", "sottotitolo": "Una frase che lo 
           "social": "@iltuocanale", "relatore": "Mario Rossi", "ruolo": "Direttore"}
 
 
+def preview_variables(variables: dict[str, str] | None) -> dict[str, str]:
+    """Testi per le anteprime: quelli scritti dall'utente, e per gli altri un esempio. Così titoli, nomi e scritte si vedono subito,
+    prima di scrivere qualcosa (nell'export un campo vuoto resta vuoto)."""
+    return {**SAMPLE, **{k: v for k, v in (variables or {}).items() if v and v.strip()}}
+
+
 @dataclass
 class Template:
     id: str
@@ -277,6 +283,13 @@ CAPTIONS = [
 ]
 
 ALL = {"title": TITLES, "lower_third": LOWER_THIRDS, "outro": OUTROS, "caption": CAPTIONS}
+
+# modelli moderni (stile vlogger): stanno in un file a parte e compaiono per primi nelle gallerie
+from . import templates_modern as _modern  # noqa: E402
+
+TITLES[:0] = _modern.TITLES
+LOWER_THIRDS[:0] = _modern.LOWER_THIRDS
+OUTROS[:0] = _modern.OUTROS
 
 
 def get(kind: str, tid: str) -> Template:

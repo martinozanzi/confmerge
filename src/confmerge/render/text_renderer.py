@@ -292,7 +292,14 @@ def _draw_image(p: QPainter, el: Element, W: int, H: int) -> QRectF:
     r = QRectF(0, 0, img.width(), img.height())
     r.moveCenter(QPointF(el.x * W, el.y * H))
     p.setRenderHint(QPainter.SmoothPixmapTransform)
-    p.drawImage(r.topLeft(), img)
+    if el.mask:                                             # forma ritagliata: arrotondato o cerchio
+        from .masks import shape_path
+        p.save()
+        p.setClipPath(shape_path(r, el.mask, el.mask_radius))
+        p.drawImage(r.topLeft(), img)
+        p.restore()
+    else:
+        p.drawImage(r.topLeft(), img)
     return r
 
 

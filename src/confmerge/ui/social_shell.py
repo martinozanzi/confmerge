@@ -6,8 +6,8 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtMultimedia import QMediaPlayer
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLineEdit, QSlider, QSplitter, QStackedWidget, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QLineEdit, QSlider, QSplitter, QStackedWidget,
+                               QVBoxLayout, QWidget)
 
 from .. import platforms as PF
 from ..media_scan import VIDEO_EXT
@@ -16,15 +16,17 @@ from .brand_card import BrandCard
 from .graphics_page import scrolled
 from .music_card import MusicCard
 from .player import PlayerWidget
+from .preview_button import PreviewButton
 from .social_style import OverlaysCard, StyleTemplateCard
 from .split_card import SplitCard
 from .subtitles_tab import SimpleSubtitlesCard
 from .theme import S2
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, SecondaryButton, Segmented,
-                      StepIndicator, Toggle, label)
+                      FlowBar, StepIndicator, Toggle, label)
 from .widgets.anim import fade_in, stagger_cards
 
-STEPS = ["Video", "Taglia", "Aspetto", "Esporta"]
+STEPS = ["Video", "Taglia", "Formato", "Due video", "Grafica", "Sottotitoli", "Audio", "Esporta"]
+LOOK_FIRST, EXPORT = 2, 7           # passi 2…6 sono i pannelli di SocialLook, 7 è l'esportazione
 ZONE_COLORS = {"youtube": "#3B82F6", "shorts": "#EF4444", "reels": "#D946EF", "tiktok": "#22D3EE", "threads": "#F59E0B",
                "instagram": "#84CC16", "x": "#94A3B8"}
 SENSITIVITY = [("Delicata", (45.0, 1.0)), ("Normale", (35.0, 0.7)), ("Decisa", (25.0, 0.45))]
@@ -48,6 +50,8 @@ def video_files(items) -> list[Path]:
 
 # ------------------------------------------------------------------------------------------------------------ 1. video
 class SocialStart(QWidget):
+    picked = Signal(object)          # file o cartelle scelti: li smista la finestra (riconosce conferenza o social)
+
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.state = state
@@ -58,8 +62,9 @@ class SocialStart(QWidget):
         pick = QWidget()
         pl = QVBoxLayout(pick)
         pl.setAlignment(Qt.AlignCenter)
-        self.drop = DropZone("Trascina qui i tuoi video",
-                             "Uno o più file (mp4, mov…). Se sono più di uno li metto uno dopo l'altro.", "Scegli i video…")
+        self.drop = DropZone("Trascina qui i tuoi video o la cartella",
+                             "Riconosco da solo se è un video per i social o una conferenza (video + registrazione audio).",
+                             "Scegli i video…")
         self.drop.setMinimumSize(620, 300)
         self.drop.setMaximumWidth(820)
         self.drop.dropped.connect(self._dropped)
@@ -98,14 +103,10 @@ class SocialStart(QWidget):
     def browse(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Scegli i video", "", "Video (*.mp4 *.mov *.m4v)")
         if files:
-            self.start(files)
+            self.picked.emit([Path(f) for f in files])
 
     def _dropped(self, items):
-        files = video_files(items)
-        if not files:
-            self.problem.setText("Non ho trovato video: trascina file mp4 o mov.")
-            return
-        self.start(files)
+        self.picked.emit([Path(p) for p in items])
 
     def start(self, files):
         from .. import social
@@ -131,9 +132,9 @@ class SocialCut(QWidget):
         self.state = state
         self.ctl = state.social
         main = QVBoxLayout(self)
-        main.addWidget(label("Taglia", "title"))
+        main.setContentsMargins(0, 0, 0, 0)
         main.addWidget(label("Togli le pause e gli errori. Quello che togli resta scuro sulla forma d'onda e viene saltato.",
-                             "muted", True))
+                             "caption", True))
         split = QSplitter(Qt.Horizontal)
         left = QWidget()
         ll = QVBoxLayout(left)
@@ -153,7 +154,7 @@ class SocialCut(QWidget):
         split.addWidget(left)
         panel = self._panel()
         sa = scrolled(panel)
-        sa.setMinimumWidth(max(400, panel.minimumSizeHint().width() + 30))     # mai una barra orizzontale, anche con testo grande
+        sa.setMinimumWidth(max(380, panel.minimumSizeHint().width() + 40))
         split.addWidget(sa)
         split.setStretchFactor(0, 5)
         split.setStretchFactor(1, 3)
@@ -176,8 +177,6 @@ class SocialCut(QWidget):
         lay.setSpacing(S2)
         c = Card()
         c.add(label("Togli i silenzi", "h2", True))
-        c.add(label("Il programma trova le pause e le toglie, lasciando un po' di margine prima e dopo il parlato.",
-                    "caption", True))
         self.sens = Segmented([(n, i) for i, (n, _) in enumerate(SENSITIVITY)])
         self.sens.changed.connect(self._sens)
         c.add(self.sens)
@@ -187,13 +186,16 @@ class SocialCut(QWidget):
         self.sil_btn = PrimaryButton("Togli i silenzi", "sparkles")
         self.sil_btn.clicked.connect(self.remove_silences)
         r.addWidget(self.sil_btn)
+        self.unsil_btn = SecondaryButton("Rimetti i silenzi", "rotate-ccw",
+                                         "Rimette le pause tolte con «Togli i silenzi» (i tagli a mano restano)")
+        self.unsil_btn.clicked.connect(self.restore_silences)
+        r.addWidget(self.unsil_btn)
         r.addStretch(1)
         c.lay.addLayout(r)
         lay.addWidget(c)
         c2 = Card()
         c2.add(label("Taglia a mano", "h2", True))
-        c2.add(label("Scegli una parte sulla forma d'onda (trascinando) e poi:", "caption", True))
-        self.sel_info = label("Nessuna parte scelta.", "", True)
+        self.sel_info = label("Nessuna parte scelta: trascina sulla forma d'onda.", "", True)
         c2.add(self.sel_info)
         r2 = QHBoxLayout()
         self.rm_btn = SecondaryButton("Togli", "trash-2", "Togli la parte scelta (scorciatoia: Canc)")
@@ -208,7 +210,6 @@ class SocialCut(QWidget):
         c2.lay.addLayout(r2)
         lay.addWidget(c2)
         c3 = Card()
-        c3.add(label("Risultato", "h2", True))
         self.summary = label("", "", True)
         c3.add(self.summary)
         r3 = QHBoxLayout()
@@ -251,6 +252,8 @@ class SocialCut(QWidget):
         self.found.setText(f"Con questa sensibilità trovo {n} pause, circa {mmss(secs)} da togliere." if n else
                            "Con questa sensibilità non trovo pause da togliere: prova «Decisa».")
         self.sil_btn.setEnabled(n > 0)
+        self.unsil_btn.setVisible(bool(self.ctl.silence_removed))
+        self.sil_btn.setVisible(not self.ctl.silence_removed)
 
     def _sens(self, i):
         db, mn = SENSITIVITY[int(i)][1]
@@ -263,13 +266,17 @@ class SocialCut(QWidget):
         n, secs = self.ctl.remove_silences()
         self.found.setText(f"Tolte {n} pause ({mmss(secs)}). Puoi annullare con «Indietro» in alto." if n else "")
 
+    def restore_silences(self):
+        n = self.ctl.restore_silences()
+        self.found.setText(f"Rimesse {n} pause." if n else "")
+
     def _sel_changed(self, sel):
         self._sel = sel
         on = sel is not None
         for b in (self.rm_btn, self.rs_btn, self.play_btn):
             b.setEnabled(on)
         self.sel_info.setText(f"Parte scelta: da {fmt_clock(sel[0])} a {fmt_clock(sel[1])} ({sel[1] - sel[0]:.1f} s)."
-                              if on else "Nessuna parte scelta.")
+                              if on else "Nessuna parte scelta: trascina sulla forma d'onda.")
 
     def remove_selection(self):
         if self._sel:
@@ -302,10 +309,9 @@ class SocialLook(QWidget):
         self.state = state
         self.root = state.settings.root
         self._hidden: set[str] = set()
+        self.open_settings = open_settings
         main = QVBoxLayout(self)
-        main.addWidget(label("Aspetto", "title"))
-        main.addWidget(label("Scegli dove pubblicare e come entra l'immagine. Le zone rosse sono coperte dall'app: "
-                             "tieni lì dentro i testi importanti.", "muted", True))
+        main.setContentsMargins(0, 0, 0, 0)
         split = QSplitter(Qt.Horizontal)
         left = QWidget()
         ll = QVBoxLayout(left)
@@ -338,28 +344,51 @@ class SocialLook(QWidget):
             b.setEnabled(False)
             pr.addWidget(b)
         pr.addStretch(1)
+        self.preview = PreviewButton(state, lambda: self.player.position(), lambda: self._preview_spec(), "Guarda 10 s")
+        pr.addWidget(self.preview)
         ll.addLayout(pr)
+        # allinea ai lati dell'area sicura (o del video), come i pulsanti di CapCut; «Ripristina» riporta posizione e grandezza
+        ar = QHBoxLayout()
+        ar.setSpacing(4)
+        self.align_btns: list[SecondaryButton] = []
+        for text, tip, h, v in (("⇤", "Allinea a sinistra", "l", ""), ("⇔", "Allinea al centro (orizzontale)", "c", ""),
+                                ("⇥", "Allinea a destra", "r", ""), ("⤒", "Allinea in alto", "", "t"),
+                                ("⇕", "Allinea al centro (verticale)", "", "m"), ("⤓", "Allinea in basso", "", "b")):
+            b = SecondaryButton(text, None, tip)
+            b.setAccessibleName(tip)
+            b.clicked.connect(lambda _=False, hh=h, vv=v: self._align(hh, vv))
+            b.setEnabled(False)
+            self.align_btns.append(b)
+            ar.addWidget(b)
+        self.reset_item = SecondaryButton("Ripristina", "rotate-ccw", "Riporta l'elemento scelto dov'era e grande com'era")
+        self.reset_item.clicked.connect(self._reset_item)
+        self.reset_item.setEnabled(False)
+        ar.addSpacing(8)
+        ar.addWidget(self.reset_item)
+        ar.addStretch(1)
+        ll.addLayout(ar)
         split.addWidget(left)
-        panel = QWidget()
-        pl = QVBoxLayout(panel)
-        pl.setSpacing(S2)
-        # piattaforme
+        # --- pannelli: uno per passo, a due colonne, senza scorrimento (pensati per un portatile 1366×768)
+        self.panels = QStackedWidget()
         self.plat_card = Card()
         self.plat_card.add(label("Dove lo pubblichi", "h2", True))
         self.toggles: dict[str, Toggle] = {}
-        for p in PF.all_platforms(self.root):
-            t = Toggle(f"{p.name}   ·   {p.aspect}")
+        grid_host = QWidget()
+        grid = QGridLayout(grid_host)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(12)
+        for i, p in enumerate(PF.all_platforms(self.root)):
+            t = Toggle(f"{p.name}  ·  {p.aspect}")
             t.setToolTip(p.note)
             t.toggled.connect(lambda on, pid=p.id: self._toggle(pid, on))
             self.toggles[p.id] = t
-            self.plat_card.add(t)
+            grid.addWidget(t, i // 2, i % 2)
+        self.plat_card.add(grid_host)
         self.warn = label("", "warn", True)
         self.plat_card.add(self.warn)
-        pl.addWidget(self.plat_card)
-        # inquadratura
         self.fr_card = Card()
         self.fr_card.add(label("Inquadratura", "h2", True))
-        self.fr_card.add(label("Il tuo video è orizzontale: come lo metto nel formato verticale?", "caption", True))
+        self.fr_card.add(label("Il tuo video non ha il formato scelto: come lo metto?", "caption", True))
         self.fr_mode = Segmented([("Riempi", "fill"), ("Sfocato", "blur"), ("Bande", "bars")])
         self.fr_mode.changed.connect(self._frame_mode)
         self.fr_card.add(self.fr_mode)
@@ -371,8 +400,20 @@ class SocialLook(QWidget):
         self.fr_pos_lbl = label("Sposta l'inquadratura a sinistra o a destra:", "caption", True)
         self.fr_card.add(self.fr_pos_lbl)
         self.fr_card.add(self.fr_pos)
-        pl.addWidget(self.fr_card)
-        pl.addWidget(SplitCard(state))
+        self.zoom_card = Card()
+        self.zoom_lbl = label("", "", True)
+        self.zoom_card.add(self.zoom_lbl)
+        self.zoom = QSlider(Qt.Horizontal)
+        self.zoom.setRange(40, 300)                        # % : sotto 100 rimpicciolisce, sopra ingrandisce
+        self.zoom.valueChanged.connect(self._zoom)
+        self.zoom_card.add(self.zoom)
+        zr = QHBoxLayout()
+        self.zoom_reset = SecondaryButton("Ripristina il video", "rotate-ccw", "Torna a zoom e posizione di partenza")
+        self.zoom_reset.clicked.connect(self._zoom_reset)
+        zr.addWidget(self.zoom_reset)
+        zr.addStretch(1)
+        self.zoom_card.lay.addLayout(zr)
+        self.zoom_card.add(label("Sull'anteprima: trascina il video per spostarlo, rotellina per ingrandire.", "caption", True))
         self.safe = Toggle("Mostra le zone coperte dall'app")
         self.safe.toggled.connect(self._safe)
         sc = Card()
@@ -381,37 +422,90 @@ class SocialLook(QWidget):
         self.legend_lay = QVBoxLayout(self.legend_box)
         self.legend_lay.setContentsMargins(0, 0, 0, 0)
         sc.add(self.legend_box)
-        sc.add(label("Ogni piattaforma ha la sua zona colorata (la loro interfaccia copre quelle parti). La linea verde è "
-                     "l'area sicura per tutte: tieni lì dentro i testi importanti.", "caption", True))
-        pl.addWidget(sc)
-        pl.addWidget(StyleTemplateCard(state))
-        pl.addWidget(BrandCard(state))
-        pl.addWidget(OverlaysCard(state))
-        pl.addWidget(SimpleSubtitlesCard(state, open_settings))
-        pl.addWidget(MusicCard(state))
-        pl.addStretch(1)
-        sa = scrolled(panel)
-        sa.setMinimumWidth(max(400, panel.minimumSizeHint().width() + 30))
-        split.addWidget(sa)
-        split.setStretchFactor(0, 5)
-        split.setStretchFactor(1, 3)
-        split.setSizes([620, 460])
+        sc.add(label("Ogni zona colorata è coperta dall'app; la linea verde è l'area sicura per tutte.", "caption", True))
+        self.panels.addWidget(self._page("Formato", "Dove lo pubblichi e come entra l'immagine. Le zone colorate sono coperte "
+                                         "dall'app: tieni lì dentro i testi importanti.", [self.plat_card, sc], [self.fr_card, self.zoom_card]))
+        self.split_card = SplitCard(state)
+        self.panels.addWidget(self._page("Due video nello stesso reel (facoltativo)", "Un secondo video sopra o sotto il tuo, "
+                                         "per esempio quello a cui rispondi. Si può saltare.", [self.split_card]))
+        self.panels.addWidget(self._page("Grafica", "Marchio, testi e immagini sul video. Trascinali sull'anteprima.",
+                                         [StyleTemplateCard(state), BrandCard(state)], [OverlaysCard(state)]))
+        self.subs_card = SimpleSubtitlesCard(state, open_settings, wide=True)
+        self.panels.addWidget(self._page("Sottotitoli", "Scrivili con l'intelligenza artificiale, scegli come si vedono e "
+                                         "provali nell'anteprima prima di esportare.", [self.subs_card]))
+        self.panels.addWidget(self._page("Audio", "Musica di sottofondo sotto la voce.", [MusicCard(state)]))
+        split.addWidget(self.panels)
+        split.setStretchFactor(0, 4)
+        split.setStretchFactor(1, 5)
+        split.setSizes([520, 700])
         main.addWidget(split, 1)
         state.profile_changed.connect(self.sync)
         state.social.finished.connect(self._loaded)
         self.sync()
 
+    def _page(self, title: str, desc: str, left: list, right: list | None = None) -> QWidget:
+        """Un pannello: titolo e frase, poi una o due colonne di schede. Non scorre: ogni pannello sta in una schermata."""
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(S2)
+        lay.addWidget(label(title, "h2"))
+        lay.addWidget(label(desc, "caption", True))
+        cols = QHBoxLayout()
+        cols.setSpacing(S2)
+        for items in (left, right):
+            if not items:
+                continue
+            col = QVBoxLayout()
+            col.setSpacing(S2)
+            for it in items:
+                col.addWidget(it)
+            col.addStretch(1)
+            cols.addLayout(col, 1)
+        lay.addLayout(cols)
+        lay.addStretch(1)
+        sa = scrolled(w)                                      # scorre solo se il testo è molto grande: normalmente sta tutto
+        sa.setMinimumWidth(w.minimumSizeHint().width() + 40)
+        return sa
+
+    def _preview_spec(self):
+        """La versione per la piattaforma scelta nell'anteprima (formato, zone, sottotitoli) come uscirebbe dall'export."""
+        p = self._current()
+        return PF.variant_spec(self.state.spec, p) if p else self.state.spec
+
+    def set_panel(self, i: int) -> None:
+        self.panels.setCurrentIndex(max(0, min(self.panels.count() - 1, i)))
+
     def _item_selected(self, kind: str, idx: int):
         from . import placement
         on = bool(kind)
-        self.c_h.setEnabled(on)
-        self.c_v.setEnabled(on)
+        movable = on and kind != "split"                     # il secondo video non si allinea: si regola trascinandolo
+        self.c_h.setEnabled(movable)
+        self.c_v.setEnabled(movable)
+        for b in self.align_btns:
+            b.setEnabled(movable)
+        self.reset_item.setEnabled(on)
         self.sel_lbl.setText(placement.label_of(self.state, kind, idx) if on
-                             else "Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).")
+                             else "Trascina testi, logo e sottotitoli sull'anteprima; le maniglie li ridimensionano "
+                                  "(Alt = senza aggancio, Maiusc = libero).")
 
     def _items_changed(self):
         self.state.touch()
         self.state.profile_changed.emit()                   # le schede mostrano «Libero» e la nuova posizione
+
+    def _align(self, h: str, v: str):
+        from . import placement
+        cv = self.player.canvas
+        if not cv.sel_item:
+            return
+        W, H = cv.frame_size()
+        safe = cv.safe_common if self.c_ref.value() == "safe" else None
+        placement.align(self.state, *cv.sel_item, W, H, h, v, safe)
+        cv.update()
+        self._items_changed()
+
+    def _reset_item(self):
+        self.player.canvas.reset_selected()
 
     def _center(self, h: bool, v: bool):
         from . import placement
@@ -498,10 +592,31 @@ class SocialLook(QWidget):
         self.fr_pos.setValue(int(im.reframe_x * 100))
         self.fr_pos.blockSignals(False)
         self._frame_ui()
+        self._sync_zoom()
         durs = [PF.duration_warning(q, self.state.social.kept_seconds()) for q in self.selected()]
         self.warn.setText("\n".join(d for d in durs if d))
         self.warn.setVisible(any(durs))
         st.touch()
+
+    def _zoom(self, v: int):
+        self.state.spec.image.vscale = v / 100
+        self.zoom_lbl.setText(f"Grandezza del video: {v} %")
+        self.state.touch()
+        self.player.canvas.update()
+
+    def _zoom_reset(self):
+        im = self.state.spec.image
+        im.vscale, im.vx, im.vy, im.reframe_x, im.reframe_y = 1.0, 0.5, 0.5, 0.5, 0.5
+        self._sync_zoom()
+        self.state.touch()
+        self.player.canvas.update()
+
+    def _sync_zoom(self):
+        v = round(self.state.spec.image.vscale * 100)
+        self.zoom.blockSignals(True)
+        self.zoom.setValue(v)
+        self.zoom.blockSignals(False)
+        self.zoom_lbl.setText(f"Grandezza del video: {v} %")
 
     def _frame_ui(self):
         mode = self.state.spec.image.reframe
@@ -593,6 +708,8 @@ class SocialExport(QWidget):
         self.go.clicked.connect(self.start)
         gr = QHBoxLayout()
         gr.addWidget(self.go)
+        self.preview = PreviewButton(state, pos_fn or (lambda: 0.0), lambda: self._first_variant(), "Guarda 10 secondi prima")
+        gr.addWidget(self.preview)
         self.thumb_btn = SecondaryButton("Miniatura YouTube…", "image", "Crea la miniatura con titolo, colori e loghi del marchio")
         self.thumb_btn.clicked.connect(self._thumb)
         gr.addWidget(self.thumb_btn)
@@ -625,6 +742,11 @@ class SocialExport(QWidget):
     def selected(self) -> list[PF.Platform]:
         ids = self.state.spec.social.platforms
         return [p for p in PF.all_platforms(self.root) if p.id in ids]
+
+    def _first_variant(self):
+        """Per la prova di 10 secondi: la prima piattaforma scelta, come uscirebbe dall'export."""
+        sel = self.selected()
+        return PF.variant_spec(self.state.spec, sel[0]) if sel else self.state.spec
 
     def showEvent(self, e):
         super().showEvent(e)
@@ -743,14 +865,14 @@ class SocialShell(QWidget):
         super().__init__(parent)
         self.state = state
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(24, 12, 24, 12)
-        top = QHBoxLayout()
-        self.steps = StepIndicator(STEPS)
-        self.steps.setMaximumWidth(620)
-        top.addStretch(1)
-        top.addWidget(self.steps, 3)
-        top.addStretch(1)
-        lay.addLayout(top)
+        lay.setContentsMargins(24, 8, 24, 8)
+        lay.setSpacing(4)
+        self.flow = FlowBar(STEPS)                        # passi cliccabili + Indietro/Avanti in alto
+        self.steps, self.back, self.next = self.flow.steps, self.flow.back, self.flow.next
+        lay.addWidget(self.flow)
+        self.hint = label("", "caption", True)
+        self.hint.setVisible(False)
+        lay.addWidget(self.hint)
         self.stack = QStackedWidget()
         self.start = SocialStart(state)
         self.cut = SocialCut(state)
@@ -759,44 +881,50 @@ class SocialShell(QWidget):
         for w in (self.start, self.cut, self.look, self.export):
             self.stack.addWidget(w)
         lay.addWidget(self.stack, 1)
-        nav = QHBoxLayout()
-        self.back = SecondaryButton("Indietro", "chevron-left")
-        self.next = PrimaryButton("Avanti", "chevron-right")
-        self.hint = label("", "caption", True)
+        self.steps.clicked.connect(self.goto)
         self.back.clicked.connect(lambda: self.show_step(max(0, self.step - 1)))
-        self.next.clicked.connect(lambda: self.show_step(min(3, self.step + 1)))
-        nav.addWidget(self.back)
-        nav.addWidget(self.hint, 1)
-        nav.addWidget(self.next)
-        lay.addLayout(nav)
+        self.next.clicked.connect(lambda: self.show_step(min(EXPORT, self.step + 1)))
         state.social.finished.connect(lambda: self.show_step(1))
         state.project_changed.connect(self._gate)
         self.export.newProject.connect(self.newProject)
+        self._step = 0
         self.show_step(0, animate=False)
 
     @property
     def step(self) -> int:
-        return self.stack.currentIndex()
+        return self._step
+
+    def goto(self, i: int) -> None:
+        """Clic su un passo: tutti si possono visitare appena c'è un video."""
+        if self.state.project or i == 0:
+            self.show_step(i)
 
     def show_step(self, i: int, animate: bool = True) -> None:
         if i > 0 and not self.state.project:
             i = 0
+        i = max(0, min(EXPORT, i))
         for w in (self.cut.player, self.look.player):
             w.player.pause()
-        self.stack.setCurrentIndex(i)
+        self._step = i
+        page = 0 if i == 0 else 1 if i == 1 else 3 if i == EXPORT else 2
+        self.stack.setCurrentIndex(page)
+        if page == 2:
+            self.look.set_panel(i - LOOK_FIRST)
         self.steps.set_state(i)
         self.back.setVisible(i > 0)
-        self.next.setVisible(0 < i < 3)
-        self.next.setText("Avanti")
+        self.next.setVisible(0 < i < EXPORT)
+        self.next.setText("Avanti" if i < EXPORT - 1 else "Esporta")
         self._gate()
-        if i == 2:
+        if i in (2, 3, 4, 5, 6):
             self.look.sync()
         if animate:
             fade_in(self.stack.currentWidget(), slide=12)
             QTimer.singleShot(60, lambda: stagger_cards(self.stack.currentWidget()))
 
     def _gate(self):
-        self.next.setEnabled(bool(self.state.project))
+        ok = bool(self.state.project)
+        self.next.setEnabled(ok)
+        self.steps.set_reach(EXPORT if ok else 0)
 
     def reset(self):
         self.start.reset()

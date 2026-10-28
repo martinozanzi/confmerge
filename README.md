@@ -7,6 +7,23 @@ overlay, lower third, slide/PiP e logo finale, ed esporta un MP4 pronto da caric
 Licenza MIT – © 2026 Martino Zanzi – https://github.com/martinozanzi/confmerge
 Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
+## Come si lavora (una selezione, passi cliccabili)
+Si trascinano i video (o la cartella) **una volta sola**: l'app riconosce da sola se è una **conferenza** (video + registrazione audio a parte) o
+un **video social** e apre lo strumento giusto. Dal selettore in alto (Social / Conferenze) si può cambiare strumento tenendo gli stessi file.
+I passi stanno in alto e si cliccano; **Indietro / Avanti** sono in alto a destra. Su un portatile 1366×768 le pagine non scorrono (con testo molto
+grande scorrono invece di tagliare). Passi: Conferenze = Cartella · Sincronia · Inizio e fine · Titoli · Sottotitoli · Audio · Esporta;
+Social = Video · Taglia · Formato · Due video · Grafica · Sottotitoli · Audio · Esporta. «Togli i silenzi» si annulla con **Rimetti i silenzi**.
+**Guarda 10 s** prepara un pezzetto con tutti gli effetti e lo riproduce prima di esportare. Titoli, nomi e scritte mostrano un testo d'esempio
+finché non scrivi il tuo, e i modelli moderni da vlogger (Vlog, Parole in movimento, Vetro, Editoriale, Contorno, Colpo di colore, schermata
+finale YouTube) sono i primi della galleria. Nel canvas il video principale si sposta trascinandolo e si ingrandisce con la rotellina.
+
+## Aggiornamenti e rilasci
+L'app controlla su GitHub se c'è una versione nuova (all'avvio, al massimo ogni 20 ore; si spegne da **Aiuto → Cerca gli aggiornamenti
+all'avvio**, o a mano da **Aiuto → Cerca aggiornamenti…**) e propone di scaricare `ConfMerge.exe` dalla release: viene letta solo la pagina pubblica,
+nessun dato dell'utente esce dal computer. L'exe non sta nel repository ma allegato alla release (Releases → Assets). Creando un tag di versione
+(`1.2.0` o `v1.2.0`) GitHub compila l'exe su Windows e lo allega; da Actions → Build Windows → Run workflow si può costruire anche l'exe di un tag
+già pubblicato.
+
 ## Uso di Merge Conferenze
 Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia in alto a destra, senza perdere nulla):
 
@@ -36,7 +53,10 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    di esempio con lo stile scelto. **Testi e immagini sul video** si aggiungono con un clic e si ancorano a un angolo o a un lato.
    Testi, logo e sottotitoli si **trascinano direttamente sull'anteprima**: si agganciano al centro, ai terzi e ai bordi della zona
    sicura (tieni premuto Alt per muoverli liberamente), anche in orizzontale; i pulsanti **Centra ↔ / ↕** li mettono al centro dell'**area
-   sicura** (la linea verde) oppure di tutto il video. Ogni testo ha **Aspetto…** con carattere, colori, contorno, ombra, sfondo e animazione.
+   sicura** (la linea verde) oppure di tutto il video. Come in CapCut, l'elemento scelto ha **8 maniglie** per ingrandirlo e rimpicciolirlo
+   (con aggancio alle guide; Alt = libero, Maiusc = proporzioni libere per le forme), pulsanti per **allineare** a sinistra/centro/destra e
+   in alto/metà/basso, **Ripristina**, frecce della tastiera (1 px, con Maiusc 10 px) e **Canc** per toglierlo; anche il bordo fra i due video
+   si trascina per cambiare l'altezza dei riquadri e dentro il secondo video si sposta l'inquadratura. Ogni testo ha **Aspetto…** con carattere, colori, contorno, ombra, sfondo e animazione.
    I **sottotitoli** hanno la lingua del video e quella dei sottotitoli (se diversa si traducono con Groq), «parole per volta» (2-3 come
    nei reel) e un'animazione d'entrata (dissolvenza, pop o **parola evidenziata**: quella che si sta dicendo si colora e si ingrandisce);
    gli stili **Reel a blocchi** e **Parola evidenziata** le mettono insieme. Si scelgono anche carattere, colore del testo, del bordo (con spessore) e
@@ -44,6 +64,8 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    **Due video nello stesso reel**: la scheda omonima mette un secondo video sopra o sotto il tuo (altezza dei riquadri, inquadratura e punto di
    partenza del secondo, audio facoltativo con volume; se è più corto si ripete). **Overlay**: immagini o video con sfondo trasparente (PNG, GIF,
    WebM, MOV), quanti vuoi, con inizio/fine e animazione; con **Salva** un overlay entra nella raccolta e si riaggiunge con un clic in altri lavori.
+   Il video principale si può **ingrandire, rimpicciolire e spostare** (sfondo sfocato o nero), il secondo video si ingrandisce e si inquadra, e
+   overlay, immagini e secondo video si ritagliano a **forma** (arrotondata o cerchio): anteprima ed export coincidono.
    Nel kit del marchio il **logo** è il marchio completo con il nome, il **simbolo** solo lo stemma/emblema.
    Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.

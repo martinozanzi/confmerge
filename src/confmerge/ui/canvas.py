@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -16,7 +17,8 @@ from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
 from ..spec import RenderSpec, output_size, split_heights
-from ..view import source_to_frame
+from ..templates import preview_variables
+from ..view import has_transform, shrink_rect, source_to_frame, zoom_window
 from .theme import theme
 
 PREVIEW_W = 960
@@ -44,6 +46,10 @@ class Canvas(QWidget):
         self.social_edit = False                         # Studio Social: testi, loghi e sottotitoli si trascinano con aggancio
         self.sel_item: tuple[str, int] | None = None
         self._item_drag: tuple[str, int, QPointF, float, float] | None = None
+        self._resize: tuple | None = None                # (tipo, indice, maniglia, rettangolo di partenza, grandezze di partenza)
+        self._split_drag: tuple | None = None            # secondo video: ("edge", ) bordo fra i riquadri · ("pan", x0, px0, overflow)
+        self._origin: dict = {}                          # com'erano gli elementi alla prima selezione, per «Ripristina»
+        self.setFocusPolicy(Qt.ClickFocus)               # le frecce e Canc agiscono sull'elemento selezionato
         self.safe_zones: list[dict] = []                 # Studio Social: [{name, color, safe=(sopra, sotto, sinistra, destra)}]
         self.safe_common = (0.0, 0.0, 0.0, 0.0)          # area sicura per tutte le piattaforme mostrate
         self.out_t = 0.0                 # tempo di uscita
@@ -87,7 +93,7 @@ class Canvas(QWidget):
         if self.elements_override is not None:
             return self.elements_override
         gr = self.state.spec.graphics
-        vs = self.state.spec.variables
+        vs = preview_variables(self.state.spec.variables)          # esempi dove non hai ancora scritto
         W, H = self.frame_size()
         els = anchors.resolve(substitute([e for e in gr.elements if "main" in e.targets], vs), W, H, self.state.spec.brand.safe)
         els += brand_elements(self.state.spec, W, H)
@@ -135,10 +141,11 @@ class Canvas(QWidget):
                 self._draw_split(p, W, H, spec, fw, fh)
             else:
                 social = self._is_social()
-                if social and spec.image.reframe == "blur" and abs(fw / fh - W / H) > 0.01:
-                    self._draw_blur_bg(p, W, H)
-                src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t, social)
-                p.drawImage(dst, self.frame, src)
+                if social:
+                    self._draw_main(p, W, H, spec, fw, fh)
+                else:
+                    src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t, social)
+                    p.drawImage(dst, self.frame, src)
                 self._draw_slides(p, W, H)
         p.end()
         if self.mode == "crop":
@@ -167,6 +174,39 @@ class Canvas(QWidget):
             self._second_cache[key] = img
         return self._second_cache[key]
 
+    def _draw_main(self, p: QPainter, W: int, Hm: int, spec: RenderSpec, fw: int, fh: int) -> None:
+        """Il tuo video (Studio Social) nel riquadro W×Hm, con inquadratura e con l'ingrandimento/riduzione scelti: come l'export."""
+        im = spec.image
+        if not has_transform(im):
+            if im.reframe == "blur" and abs(fw / fh - W / Hm) > 0.01:
+                self._draw_blur_bg(p, W, Hm)
+            src, dst = source_to_frame(fw, fh, im, W, Hm, self.out_t, True)
+            p.drawImage(dst, self.frame, src)
+            return
+        if im.vscale > 1.0:                                  # ingrandito: finestra del riquadro intero, portata a tutto schermo
+            base = new_image(W, Hm)
+            q = QPainter(base)
+            q.setRenderHint(QPainter.SmoothPixmapTransform)
+            q.fillRect(0, 0, W, Hm, Qt.black)
+            self._draw_main(q, W, Hm, replace(spec, image=replace(im, vscale=1.0)), fw, fh)
+            q.end()
+            zx, zy, zw, zh = zoom_window(im.vscale, im.vx, im.vy, W, Hm)
+            p.setRenderHint(QPainter.SmoothPixmapTransform)
+            p.drawImage(QRectF(0, 0, W, Hm), base, QRectF(zx, zy, zw, zh))
+            return
+        if im.reframe == "blur":                             # rimpicciolito: sfondo sfocato (o nero) e il video più piccolo sopra
+            self._draw_blur_bg(p, W, Hm)
+        fg = new_image(W, Hm)
+        q = QPainter(fg)
+        q.setRenderHint(QPainter.SmoothPixmapTransform)
+        flat = replace(im, vscale=1.0, reframe="fill" if im.reframe == "fill" else "bars")
+        src, dst = source_to_frame(fw, fh, flat, W, Hm, self.out_t, True)
+        q.drawImage(dst, self.frame, src)
+        q.end()
+        x, y, w, h = shrink_rect(im.vscale, im.vx, im.vy, W, Hm)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawImage(QRectF(x, y, w, h), fg)
+
     def _draw_split(self, p: QPainter, W: int, H: int, spec: RenderSpec, fw: int, fh: int) -> None:
         """Due riquadri uno sopra l'altro: il tuo video (con la sua inquadratura) e il secondo video."""
         sp = spec.split
@@ -176,10 +216,7 @@ class Canvas(QWidget):
         p.save()
         p.setClipRect(QRectF(0, y_main, W, h_main))
         p.translate(0, y_main)
-        if spec.image.reframe == "blur" and abs(fw / fh - W / h_main) > 0.01:
-            self._draw_blur_bg(p, W, h_main)
-        src, dst = source_to_frame(fw, fh, spec.image, W, h_main, self.out_t, True)
-        p.drawImage(dst, self.frame, src)
+        self._draw_main(p, W, h_main, spec, fw, fh)
         p.restore()
         p.save()
         p.setClipRect(QRectF(0, y_2, W, h_2))
@@ -189,9 +226,14 @@ class Canvas(QWidget):
             p.setPen(QColor("#d0d4dc"))
             p.drawText(QRectF(0, y_2, W, h_2), Qt.AlignCenter, "Secondo video")
         else:
-            s = max(W / sec.width(), h_2 / sec.height())
+            z = min(max(sp.second_scale, 1.0), 3.0)
+            s = max(W / sec.width(), h_2 / sec.height()) * z
             w, h = sec.width() * s, sec.height() * s
-            p.drawImage(QRectF(-(w - W) * min(1.0, max(0.0, sp.second_x)), y_2 - (h - h_2) / 2, w, h), sec)
+            if sp.mask:                                      # fuori dalla forma resta nero, come nell'export
+                from ..render.masks import shape_path
+                p.setClipPath(shape_path(QRectF(0, y_2, W, h_2), sp.mask, sp.mask_radius))
+            p.drawImage(QRectF(-(w - W) * min(1.0, max(0.0, sp.second_x)),
+                               y_2 - (h - h_2) * min(1.0, max(0.0, sp.second_y)), w, h), sec)
         p.restore()
 
     def _draw_subtitle(self, img: QImage, W: int, H: int) -> QImage:
@@ -267,7 +309,7 @@ class Canvas(QWidget):
     def _scene_elements(self) -> list[Element]:
         if not self.scene:
             return []
-        vs = self.state.spec.variables
+        vs = preview_variables(self.state.spec.variables)
         extra = [e for e in self.state.spec.graphics.elements if self.scene_target in e.targets]
         return substitute(list(self.scene.elements), vs) + substitute(extra, vs)
 
@@ -358,7 +400,10 @@ class Canvas(QWidget):
             s = tr.width() / W
             p.setPen(QPen(QColor("#4aa3ff"), 1, Qt.DashLine))
             p.setBrush(Qt.NoBrush)
-            p.drawRect(QRectF(tr.x() + b.x() * s, tr.y() + b.y() * s, b.width() * s, b.height() * s))
+            wr = QRectF(tr.x() + b.x() * s, tr.y() + b.y() * s, b.width() * s, b.height() * s)
+            p.drawRect(wr)
+            if self._merge_resizable(els[self.selected]):
+                self._draw_handles(p, wr)
         if self.social_edit and self.sel_item and self.mode == "video":
             W, H = self.frame_size()
             for kind, i, r in placement.items(self.state, W, H):
@@ -366,7 +411,11 @@ class Canvas(QWidget):
                     sc = tr.width() / W
                     p.setPen(QPen(QColor("#4aa3ff"), 2, Qt.DashLine))
                     p.setBrush(Qt.NoBrush)
-                    p.drawRect(QRectF(tr.x() + r.x() * sc, tr.y() + r.y() * sc, r.width() * sc, r.height() * sc))
+                    wr = QRectF(tr.x() + r.x() * sc, tr.y() + r.y() * sc, r.width() * sc, r.height() * sc)
+                    p.drawRect(wr)
+                    if placement.has_handles(self.state, kind, i):
+                        self._draw_handles(p, wr)
+        self._draw_split_edge(p, tr)
         if self._guides and self.show_guides:
             p.setPen(QPen(QColor("#ff4fa3"), 1))
             for axis, v in self._guides:
@@ -400,17 +449,10 @@ class Canvas(QWidget):
         W, H = self.frame_size()
         f = self._to_frame(pos)
         if self.social_edit and self.mode == "video":
-            found = placement.hit(placement.items(self.state, W, H), f.x() * W, f.y() * H)
-            if found:
-                kind, i, r = found
-                self.sel_item = (kind, i)
-                self._item_drag = (kind, i, QPointF(r.center().x() / W - f.x(), r.center().y() / H - f.y()),
-                                   r.width() / W, r.height() / H)
-                self.itemSelected.emit(kind, i)
-            else:
-                self.sel_item = None
-                self.itemSelected.emit("", -1)
-            self.update()
+            self.setFocus()
+            self._social_press(pos, f, W, H)
+            return
+        if self._merge_press(pos, f, W, H):
             return
         els = self._edit_elements()
         for i in range(len(els) - 1, -1, -1):
@@ -434,6 +476,16 @@ class Canvas(QWidget):
             self._crop_rect = QRectF(self._crop_drag, pos).normalized()
             self.update()
             return
+        if self._resize is not None:
+            self._resize_move(pos, e)
+            return
+        if self._split_drag is not None:
+            self._split_move(pos, e)
+            return
+        if self._item_drag is None and self.social_edit and self.mode == "video":
+            self._hover_cursor(pos)
+        elif self._item_drag is None and self._drag_idx < 0:
+            self._hover_cursor(pos)
         if self._item_drag is not None:
             kind, i, off, w, h = self._item_drag
             W, H = self.frame_size()
@@ -480,10 +532,299 @@ class Canvas(QWidget):
             self._crop_rect = None
             self._crop_drag = None
             self.update()
-        moved = self._item_drag is not None
+        moved = self._item_drag is not None or self._resize is not None or self._split_drag is not None
+        merge_resized = self._resize is not None and self._resize[0] == "merge"
         self._item_drag = None
+        self._resize = None
+        self._split_drag = None
         self._drag_idx = -1
         self._guides = []
+        self.setCursor(Qt.ArrowCursor)
         self.update()
-        if moved:
+        if merge_resized:
+            self.state.touch()                           # il pannello delle proprietà si aggiorna
+        elif moved:
             self.itemsChanged.emit()
+
+    # --- maniglie, secondo video e tastiera -------------------------------------------------------------------------
+    HANDLE_TOL = 9                                       # pixel dello schermo attorno a una maniglia
+
+    def _widget_rect(self, r: QRectF) -> QRectF:
+        """Rettangolo in pixel del fotogramma → pixel del widget."""
+        W, H = self.frame_size()
+        tr = self._target_rect()
+        s = tr.width() / W
+        return QRectF(tr.x() + r.x() * s, tr.y() + r.y() * s, r.width() * s, r.height() * s)
+
+    def _sel_rect(self) -> QRectF | None:
+        """Rettangolo (pixel del fotogramma) dell'elemento selezionato in Studio Social."""
+        if not (self.social_edit and self.sel_item and self.mode == "video"):
+            return None
+        W, H = self.frame_size()
+        for kind, i, r in placement.items(self.state, W, H):
+            if (kind, i) == self.sel_item:
+                return r
+        return None
+
+    def _draw_handles(self, p: QPainter, wr: QRectF) -> None:
+        p.setPen(QPen(QColor("#4aa3ff"), 1.5))
+        p.setBrush(QColor("#ffffff"))
+        h = placement.HANDLE_PX
+        for hx, hy in placement.handle_points(wr).values():
+            p.drawRect(QRectF(hx - h / 2, hy - h / 2, h, h))
+
+    def _draw_split_edge(self, p: QPainter, tr: QRectF) -> None:
+        """Maniglia sul bordo fra i due video: si trascina in su e in giù per cambiare l'altezza dei riquadri."""
+        if not (self.social_edit and self.mode == "video"):
+            return
+        W, H = self.frame_size()
+        b = placement.split_boundary(self.state, H) if placement.split_rect(self.state, W, H) is not None else None
+        if b is None:
+            return
+        y = tr.y() + b * tr.height()
+        p.setPen(QPen(QColor("#4aa3ff"), 2))
+        p.drawLine(QPointF(tr.x(), y), QPointF(tr.right(), y))
+        p.setBrush(QColor("#4aa3ff"))
+        p.setPen(Qt.NoPen)
+        p.drawRoundedRect(QRectF(tr.center().x() - 22, y - 4, 44, 8), 4, 4)
+
+    def _remember(self, kind: str, i: int) -> None:
+        """Ricorda com'era l'elemento alla prima selezione: «Ripristina» lo riporta lì."""
+        key = self._key(kind, i)
+        if key not in self._origin:
+            self._origin[key] = placement.snapshot(self.state, kind, i)
+
+    def _key(self, kind: str, i: int):
+        if kind == "el":
+            return ("el", self.state.spec.graphics.elements[i].id)
+        if kind == "logo":
+            return ("logo", self.state.spec.brand.logos[i].path)
+        return (kind, 0)
+
+    def _social_press(self, pos: QPointF, f: QPointF, W: int, H: int) -> None:
+        tr = self._target_rect()
+        r = self._sel_rect()
+        if r is not None and placement.has_handles(self.state, *self.sel_item):
+            h = placement.handle_at(self._widget_rect(r), pos.x(), pos.y(), self.HANDLE_TOL)
+            if h:                                         # maniglia: si ridimensiona
+                kind, i = self.sel_item
+                self._remember(kind, i)
+                self._resize = (kind, i, h, QRectF(r), placement.sizes(self.state, kind, i))
+                return
+        b = placement.split_boundary(self.state, H) if placement.split_rect(self.state, W, H) is not None else None
+        if b is not None and abs(f.y() - b) * tr.height() < 7:         # bordo fra i due video
+            self.sel_item = ("split", 0)
+            self._remember("split", 0)
+            self._split_drag = ("edge",)
+            self.itemSelected.emit("split", 0)
+            self.update()
+            return
+        found = placement.hit(placement.items(self.state, W, H), f.x() * W, f.y() * H)
+        if found:
+            kind, i, r = found
+            self.sel_item = (kind, i)
+            self._remember(kind, i)
+            if kind == "split":
+                self._split_drag = ("pan", self.state.spec.split.second_x, f.x(), self._split_overflow(r))
+            else:
+                self._item_drag = (kind, i, QPointF(r.center().x() / W - f.x(), r.center().y() / H - f.y()),
+                                   r.width() / W, r.height() / H)
+            self.itemSelected.emit(kind, i)
+        else:
+            self.sel_item = None
+            self.itemSelected.emit("", -1)
+            self._video_press(f, W, H)                    # nessun elemento: si sposta il video stesso
+        self.update()
+
+    # --- il video principale si sposta e si ingrandisce con il mouse (rotellina = zoom)
+    def _main_region(self, W: int, H: int) -> QRectF:
+        r = placement.split_rect(self.state, W, H)
+        sp = self.state.spec.split
+        if r is None:
+            return QRectF(0, 0, W, H)
+        top, gap, bot = split_heights(sp, H)
+        return QRectF(0, 0, W, top) if sp.main_on_top else QRectF(0, top + gap, W, bot)
+
+    def _video_press(self, f: QPointF, W: int, H: int) -> None:
+        im = self.state.spec.image
+        reg = self._main_region(W, H)
+        if not self._is_social() or not reg.contains(f.x() * W, f.y() * H):
+            return
+        over = 0.0
+        if self.state.clips:                              # quanto il video «riempito» sporge ai lati (per far seguire il mouse)
+            c = self.state.clips[0]
+            ar = c.width / max(c.height, 1) * (1 - im.crop_l - im.crop_r) / max(0.05, 1 - im.crop_t - im.crop_b)
+            over = max(0.0, ar * reg.height() / W - 1.0)
+        self._split_drag = ("video", im.vx, im.vy, im.reframe_x, f.x(), f.y(), over if im.reframe == "fill" else 0.0)
+
+    def _video_move(self, f: QPointF) -> None:
+        from ..view import MAX_VSCALE, MIN_VSCALE
+        im = self.state.spec.image
+        _, vx0, vy0, rx0, fx0, fy0, over = self._split_drag
+        dx, dy = f.x() - fx0, f.y() - fy0
+        s = im.vscale
+        if s > 1.005:                                     # ingrandito: il video segue il mouse
+            im.vx, im.vy = min(1.0, max(0.0, vx0 - dx / s)), min(1.0, max(0.0, vy0 - dy / s))
+        elif s < 0.995:                                   # rimpicciolito: si sposta il riquadro
+            im.vx, im.vy = min(1.0, max(0.0, vx0 + dx)), min(1.0, max(0.0, vy0 + dy))
+        elif over > 0.001:                                # a misura piena: cambia la parte mostrata
+            im.reframe_x = min(1.0, max(0.0, rx0 - dx / over))
+        self.update()
+
+    def wheelEvent(self, e):
+        if not (self.social_edit and self.mode == "video" and self._is_social()):
+            return super().wheelEvent(e)
+        from ..view import MAX_VSCALE, MIN_VSCALE
+        im = self.state.spec.image
+        im.vscale = min(MAX_VSCALE, max(MIN_VSCALE, im.vscale * (1.1 ** (e.angleDelta().y() / 120))))
+        if abs(im.vscale - 1.0) < 0.03:
+            im.vscale = 1.0                               # si ferma sul 100 %
+        self.state.touch()
+        self.update()
+        self.itemsChanged.emit()
+        e.accept()
+
+    def _split_overflow(self, r: QRectF) -> float:
+        """Quanto il secondo video sporge in larghezza dal suo riquadro (frazione della larghezza): serve a far seguire il mouse."""
+        sp = self.state.spec.split
+        sec = self._second_frame(sp.path, sp.second_start)
+        if sec is None or sec.width() <= 0:
+            return 0.3
+        W, _ = self.frame_size()
+        s = max(W / sec.width(), r.height() / sec.height())
+        return max(0.0, sec.width() * s / W - 1.0)
+
+    def _split_move(self, pos: QPointF, e) -> None:
+        f = self._to_frame(pos)
+        sp = self.state.spec.split
+        d = self._split_drag
+        self._guides = []
+        if d[0] == "video":
+            self._video_move(f)
+            return
+        if d[0] == "edge":
+            y = min(0.75, max(0.25, f.y()))
+            if not (e.modifiers() & Qt.AltModifier) and abs(y - 0.5) < 0.015:
+                y = 0.5
+                self._guides = [("y", 0.5)]
+            sp.ratio = y
+        else:
+            _, x0, fx0, over = d
+            if over > 0.001:                              # il video segue il mouse: trascinare a destra mostra più sinistra
+                sp.second_x = min(1.0, max(0.0, x0 - (f.x() - fx0) / over))
+        self.update()
+
+    def _resize_move(self, pos: QPointF, e) -> None:
+        kind, i, h, r0, orig = self._resize
+        W, H = self.frame_size()
+        f = self._to_frame(pos)
+        alt, shift = bool(e.modifiers() & Qt.AltModifier), bool(e.modifiers() & Qt.ShiftModifier)
+        if kind == "merge":
+            self._guides = self._merge_resize(i, h, r0, orig, f.x() * W, f.y() * H, W, H, not alt, shift)
+        else:
+            self._guides = placement.resize_item(self.state, kind, i, orig, r0, h, f.x() * W, f.y() * H, W, H,
+                                                 self._snap_safe(), snap_on=not alt, free=shift)
+        self.update()
+
+    def _hover_cursor(self, pos: QPointF) -> None:
+        """Il cursore dice cosa si può fare: maniglia = ridimensiona, bordo dei due video = su e giù."""
+        shape = Qt.ArrowCursor
+        W, H = self.frame_size()
+        wr = None
+        if self.social_edit and self.mode == "video":
+            r = self._sel_rect()
+            if r is not None and placement.has_handles(self.state, *self.sel_item):
+                wr = self._widget_rect(r)
+            b = placement.split_boundary(self.state, H) if placement.split_rect(self.state, W, H) is not None else None
+            tr = self._target_rect()
+            if b is not None and abs(pos.y() - (tr.y() + b * tr.height())) < 7:
+                shape = Qt.SizeVerCursor
+        elif self.mode != "crop" and 0 <= self.selected < len(self._edit_elements()):
+            el = self._edit_elements()[self.selected]
+            if self._merge_resizable(el):
+                wr = self._widget_rect(element_bbox(el, W, H))
+        if wr is not None:
+            h = placement.handle_at(wr, pos.x(), pos.y(), self.HANDLE_TOL)
+            shape = {"nw": Qt.SizeFDiagCursor, "se": Qt.SizeFDiagCursor, "ne": Qt.SizeBDiagCursor, "sw": Qt.SizeBDiagCursor,
+                     "n": Qt.SizeVerCursor, "s": Qt.SizeVerCursor, "e": Qt.SizeHorCursor, "w": Qt.SizeHorCursor}.get(h, shape)
+        self.setCursor(shape)
+
+    # --- Merge: gli elementi grafici selezionati hanno le stesse maniglie
+    @staticmethod
+    def _merge_resizable(el: Element) -> bool:
+        return el.kind in ("text", "image", "clip", "shape") and el.visible and not el.locked
+
+    def _merge_press(self, pos: QPointF, f: QPointF, W: int, H: int) -> bool:
+        els = self._edit_elements()
+        if self.mode == "crop" or not (0 <= self.selected < len(els)):
+            return False
+        el = els[self.selected]
+        if not self._merge_resizable(el):
+            return False
+        r0 = element_bbox(el, W, H)
+        h = placement.handle_at(self._widget_rect(r0), pos.x(), pos.y(), self.HANDLE_TOL)
+        if not h:
+            return False
+        orig = {"size": el.size, "width": el.width, "w": el.w, "h": el.h, "fit_width": el.fit_width}
+        self._resize = ("merge", self.selected, h, QRectF(r0), orig)
+        return True
+
+    def _merge_resize(self, idx: int, h: str, r0: QRectF, orig: dict, px: float, py: float, W: int, H: int,
+                      snap_on: bool, free: bool) -> list:
+        el = self._edit_elements()[idx]
+        independent = el.kind == "shape" and (free or h in ("n", "s", "e", "w"))
+        r, fx, fy, guides = placement.resize_rect(r0, h, px, py, W, H, None, snap_on, keep_ratio=not independent)
+        f = max(fx, fy)
+        if el.kind == "text":
+            el.size, el.fit_width = min(0.5, max(0.01, orig["size"] * f)), 0.0
+        elif el.kind in ("image", "clip"):
+            el.width = min(1.5, max(0.02, orig["width"] * f))
+        elif el.kind == "shape":
+            gx, gy = (fx, fy) if independent else (f, f)
+            el.w, el.h = min(2.0, max(0.005, orig["w"] * gx)), min(2.0, max(0.005, orig["h"] * gy))
+        real = element_bbox(el, W, H)
+        cx = r0.left() + real.width() / 2 if "w" not in h else r0.right() - real.width() / 2
+        cy = r0.top() + real.height() / 2 if "n" not in h else r0.bottom() - real.height() / 2
+        if h in ("n", "s"):
+            cx = r0.center().x()
+        if h in ("e", "w"):
+            cy = r0.center().y()
+        el.x, el.y = cx / W, cy / H
+        self.elementMoved.emit(idx, el.x, el.y)
+        return guides
+
+    # --- comandi sull'elemento selezionato (pulsanti e tastiera)
+    def reset_selected(self) -> None:
+        """«Ripristina»: l'elemento torna dov'era e grande com'era alla prima selezione (o ai valori di partenza)."""
+        if not self.sel_item:
+            return
+        kind, i = self.sel_item
+        snap = self._origin.get(self._key(kind, i)) or placement.defaults(self.state, kind, i)
+        placement.restore(self.state, kind, i, snap)
+        self.update()
+        self.itemsChanged.emit()
+
+    def delete_selected(self) -> bool:
+        if not self.sel_item or not placement.remove(self.state, *self.sel_item):
+            return False
+        self.sel_item = None
+        self.itemSelected.emit("", -1)
+        self.update()
+        self.itemsChanged.emit()
+        return True
+
+    def keyPressEvent(self, e):
+        if self.social_edit and self.mode == "video" and self.sel_item:
+            step = 10 if (e.modifiers() & Qt.ShiftModifier) else 1
+            d = {Qt.Key_Left: (-step, 0), Qt.Key_Right: (step, 0), Qt.Key_Up: (0, -step), Qt.Key_Down: (0, step)}.get(e.key())
+            if d:
+                W, H = self.frame_size()
+                placement.nudge(self.state, *self.sel_item, d[0], d[1], W, H)
+                self.update()
+                self.itemsChanged.emit()
+                e.accept()
+                return
+            if e.key() in (Qt.Key_Delete, Qt.Key_Backspace) and self.delete_selected():
+                e.accept()
+                return
+        super().keyPressEvent(e)
