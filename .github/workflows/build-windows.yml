@@ -17,6 +17,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"      # tutte le azioni girano su Node 24 (Node 20 è in dismissione)
+
 jobs:
   build:
     runs-on: windows-latest
