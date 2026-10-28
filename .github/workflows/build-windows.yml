@@ -1,12 +1,18 @@
 name: Build Windows
 
 # Compila ConfMerge.exe su Windows a ogni push su main (e a richiesta) e pubblica i file come artefatti.
-# Con un tag «v*» (es. v0.2.0) crea anche una Release con i due pacchetti.
+# Con un tag di versione (es. 1.2.0 oppure v1.2.0) crea anche la Release con i pacchetti, e la versione dell'app
+# diventa quella del tag. A richiesta (Run workflow) si può scrivere un tag già esistente: l'exe va nella sua Release.
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag di una release già pubblicata a cui allegare l'exe (vuoto = solo artefatto)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -16,6 +22,19 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Versione dal tag
+        shell: pwsh
+        env:
+          TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+        run: |
+          if ($env:TAG) {
+            $v = $env:TAG -replace '^v', ''
+            (Get-Content src\confmerge\__init__.py) -replace '__version__ = ".*"', "__version__ = `"$v`"" | Set-Content src\confmerge\__init__.py
+            Select-String -Path src\confmerge\__init__.py -Pattern '__version__'
+          }
 
       - uses: actions/setup-python@v6
         with:
@@ -64,10 +83,11 @@ jobs:
             dist/ConfMerge-cartella.zip
           if-no-files-found: error
 
-      - name: Release (solo con i tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
+      - name: Release (con un tag di versione)
+        if: github.ref_type == 'tag' || inputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           files: |
             dist/onefile/ConfMerge.exe
             dist/onefile/THIRD-PARTY-NOTICES.txt
