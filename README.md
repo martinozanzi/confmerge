@@ -7,6 +7,23 @@ overlay, lower third, slide/PiP e logo finale, ed esporta un MP4 pronto da caric
 Licenza MIT – © 2026 Martino Zanzi – https://github.com/martinozanzi/confmerge
 Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
+## Come si lavora (una selezione, passi cliccabili)
+Si trascinano i video (o la cartella) **una volta sola**: l'app riconosce da sola se è una **conferenza** (video + registrazione audio a parte) o
+un **video social** e apre lo strumento giusto. Dal selettore in alto (Social / Conferenze) si può cambiare strumento tenendo gli stessi file.
+I passi stanno in alto e si cliccano; **Indietro / Avanti** sono in alto a destra. Su un portatile 1366×768 le pagine non scorrono (con testo molto
+grande scorrono invece di tagliare). Passi: Conferenze = Cartella · Sincronia · Inizio e fine · Titoli · Sottotitoli · Audio · Esporta;
+Social = Video · Taglia · Formato · Due video · Grafica · Sottotitoli · Audio · Esporta. «Togli i silenzi» si annulla con **Rimetti i silenzi**.
+**Guarda 10 s** prepara un pezzetto con tutti gli effetti e lo riproduce prima di esportare. Titoli, nomi e scritte mostrano un testo d'esempio
+finché non scrivi il tuo, e i modelli moderni da vlogger (Vlog, Parole in movimento, Vetro, Editoriale, Contorno, Colpo di colore, schermata
+finale YouTube) sono i primi della galleria. Nel canvas il video principale si sposta trascinandolo e si ingrandisce con la rotellina.
+
+## Aggiornamenti e rilasci
+L'app controlla su GitHub se c'è una versione nuova (all'avvio, al massimo ogni 20 ore; si spegne da **Aiuto → Cerca gli aggiornamenti
+all'avvio**, o a mano da **Aiuto → Cerca aggiornamenti…**) e propone di scaricare `ConfMerge.exe` dalla release: viene letta solo la pagina pubblica,
+nessun dato dell'utente esce dal computer. L'exe non sta nel repository ma allegato alla release (Releases → Assets). Creando un tag di versione
+(`1.2.0` o `v1.2.0`) GitHub compila l'exe su Windows e lo allega; da Actions → Build Windows → Run workflow si può costruire anche l'exe di un tag
+già pubblicato.
+
 ## Uso di Merge Conferenze
 Avvia `ConfMerge.exe`. Ci sono due modalità, sullo stesso progetto (si cambia in alto a destra, senza perdere nulla):
 
