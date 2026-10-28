@@ -48,6 +48,9 @@ class TemplateTab(QWidget):
         lay.addWidget(self.vars_box)
         self.note = label("", "caption", True)
         lay.addWidget(self.note)
+        self.sample_note = label("Finché un campo è vuoto, nell'anteprima vedi un testo d'esempio: scrivi il tuo e lo vedi subito.",
+                                 "caption", True)
+        lay.addWidget(self.sample_note)
         if kind == "caption":
             b = SecondaryButton("Sposta o modifica le scritte…", "layers", "Apre «Logo e grafica»")
             b.clicked.connect(self.goDecorations)
@@ -91,6 +94,7 @@ class TemplateTab(QWidget):
             if it.widget():
                 it.widget().deleteLater()
         self._keys = self._wanted_keys()
+        self.sample_note.setVisible(bool(self._keys))
         if self._keys:
             self.vars_lay.addWidget(label("Testi", "h3"))
             self.vars_lay.addWidget(VariablesForm(self.state, self._keys))

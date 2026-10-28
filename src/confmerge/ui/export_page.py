@@ -68,7 +68,6 @@ class ExportPage(QWidget):
         self.state, self.review = state, review_page
         self.ctl = state.export
         main = QVBoxLayout(self)
-        main.addWidget(label("Export e coda", "title"))
         cols = QBoxLayout(QBoxLayout.LeftToRight)      # in finestre strette le due colonne vanno una sotto l'altra
         self._cols = cols
         cols.setSpacing(S2)

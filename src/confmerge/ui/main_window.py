@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
         self.home.chosen.connect(self.set_app)
         self.selection: list[Path] = []                      # i file scelti: uno solo per tutti gli strumenti
         self.simple.start.picked.connect(self.open_sources)
+        self.adv.picked.connect(self.open_sources)
         self.social.start.picked.connect(self.open_sources)
         self.social_state.project_changed.connect(self._project_changed)
         self.social_state.spec_changed.connect(self._history_buttons)

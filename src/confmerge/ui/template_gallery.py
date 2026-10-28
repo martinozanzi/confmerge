@@ -90,6 +90,16 @@ class _Card(QAbstractButton):
         p.setPen(QColor(t.text))
         p.drawText(QRectF(8, THUMB_H + 10, THUMB_W - 4, 24), Qt.AlignVCenter | Qt.AlignLeft,
                    self.fontMetrics().elidedText(self.tpl.name, Qt.ElideRight, THUMB_W - 4))
+        if "moderni" in self.tpl.tags:                       # etichetta sull'angolo dell'anteprima
+            f.setPixelSize(10)
+            f.setBold(True)
+            p.setFont(f)
+            tag = QRectF(12, 12, 52, 16)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(t.accent))
+            p.drawRoundedRect(tag, 8, 8)
+            p.setPen(QColor(t.on_accent))
+            p.drawText(tag, Qt.AlignCenter, "Moderni")
         p.end()
 
     def enterEvent(self, e):

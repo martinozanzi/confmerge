@@ -9,7 +9,7 @@ from .export_page import ExportPage
 from .graphics_page import GraphicsPage
 from .pages import AnalysisPage, SelectPage
 from .review_page import ReviewPage
-from .widgets import SideNav
+from .widgets import PrimaryButton, SecondaryButton, SideNav, label
 from .widgets.anim import fade_in
 
 class _WidthWatcher(QObject):
@@ -48,7 +48,17 @@ class AdvancedShell(QWidget):
         self.stack = QStackedWidget()
         body = QWidget()
         bl = QVBoxLayout(body)
-        bl.setContentsMargins(16, 12, 16, 12)
+        bl.setContentsMargins(16, 8, 16, 12)
+        top = QHBoxLayout()                                  # fase corrente + Indietro / Avanti in alto
+        self.phase_lbl = label("", "h2")
+        top.addWidget(self.phase_lbl, 1)
+        self.back = SecondaryButton("Indietro", "chevron-left")
+        self.next = PrimaryButton("Avanti", "chevron-right")
+        self.back.clicked.connect(lambda: self.step(-1))
+        self.next.clicked.connect(lambda: self.step(1))
+        top.addWidget(self.back)
+        top.addWidget(self.next)
+        bl.addLayout(top)
         bl.addWidget(self.stack)
         lay.addWidget(body, 1)
 
@@ -80,6 +90,7 @@ class AdvancedShell(QWidget):
         self._export_filter = _WidthWatcher(sa.viewport(), self.export.set_available_width)
         self.stack.addWidget(sa)
 
+        self.picked = self.select.picked
         self.nav.selected.connect(self.goto)
         self.select.analyzeRequested.connect(self.start_analysis)
         state.analysis.finished.connect(self._analysis_done)
@@ -122,6 +133,26 @@ class AdvancedShell(QWidget):
         if i == 1:
             self.review.setFocus()
         self.phaseChanged.emit(i)
+        self._top_bar()
+
+    def _locked(self, i: int) -> bool:
+        return i > 0 and not self.state.project
+
+    def _top_bar(self) -> None:
+        i, n = self.stack.currentIndex(), len(PHASES)
+        self.phase_lbl.setText(f"Fase {i + 1} di {n} · {PHASES[i][1]}")
+        self.back.setVisible(i > 0)
+        self.next.setVisible(i < n - 1)
+        self.next.setText("Esporta" if i == n - 2 else "Avanti")
+        self.next.setEnabled(i < n - 1 and not self._locked(i + 1))
+
+    def step(self, d: int) -> None:
+        """Indietro / Avanti: salta le fasi bloccate (senza progetto resta solo «Sorgenti»)."""
+        j = self.stack.currentIndex() + d
+        while 0 <= j < len(PHASES) and self._locked(j):
+            j += d
+        if 0 <= j < len(PHASES):
+            self.goto(j)
 
     def refresh_nav(self) -> None:
         has = self.state.project is not None
@@ -136,6 +167,7 @@ class AdvancedShell(QWidget):
             else:
                 st = "done" if i in self.visited else "idle"
             self.nav.set_state(i, st)
+        self._top_bar()
 
     def current(self) -> int:
         return self.stack.currentIndex()
