@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPen
-from PySide6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
+from PySide6.QtWidgets import (QApplication, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
                                QWidget)
 
 from .theme import RADIUS_CARD, S1, S2, shadow, theme
@@ -12,6 +12,16 @@ SUGGESTED = ["#FFFFFF", "#F3F4F6", "#9CA3AF", "#4B5563", "#1F2937", "#000000",
              "#EF4444", "#F97316", "#F59E0B", "#FACC15", "#84CC16", "#22C55E",
              "#14B8A6", "#06B6D4", "#38BDF8", "#3B82F6", "#6366F1", "#EC4899",
              "#FDE68A", "#FCA5A5", "#A7F3D0", "#BAE6FD", "#C7D2FE", "#FBCFE8"]
+# Palette già pronte (sei colori ciascuna): si scelgono da un menu, poi un clic sul colore.
+PALETTES: dict[str, list[str]] = {
+    "Giornalistica": ["#FFFFFF", "#111827", "#E11D48", "#FACC15", "#2563EB", "#9CA3AF"],
+    "Istituzionale": ["#FFFFFF", "#0F2A4A", "#1D4ED8", "#38BDF8", "#C9A227", "#E5E7EB"],
+    "Social vivace": ["#FFFFFF", "#000000", "#FF3B6B", "#FFD60A", "#7C3AED", "#06D6A0"],
+    "Pastello": ["#FFFFFF", "#334155", "#FBCFE8", "#BAE6FD", "#FDE68A", "#BBF7D0"],
+    "Notte": ["#F8FAFC", "#020617", "#1E293B", "#6366F1", "#22D3EE", "#F472B6"],
+    "Terra": ["#FFF7ED", "#292524", "#9A3412", "#CA8A04", "#4D7C0F", "#78716C"],
+    "Alto contrasto": ["#FFFFFF", "#000000", "#FFE600", "#00E5FF", "#FF2D2D", "#00D26A"],
+}
 MAX_RECENT = 10
 
 
@@ -141,6 +151,16 @@ class ColorPicker(QFrame):
         self.hex.editingFinished.connect(self._from_hex)
         row.addWidget(self.hex, 1)
         lay.addLayout(row)
+        lay.addWidget(self._cap("Palette pronte"))
+        self.pal = QComboBox()
+        for n in PALETTES:
+            self.pal.addItem(n)
+        self.pal.setToolTip("Scegli una palette: poi clicca uno dei suoi colori")
+        lay.addWidget(self.pal)
+        self.pal_box = QVBoxLayout()
+        lay.addLayout(self.pal_box)
+        self.pal.currentTextChanged.connect(self._palette)
+        self._palette(self.pal.currentText())
         lay.addWidget(self._cap("Colori suggeriti"))
         lay.addLayout(self._grid(SUGGESTED, 6))
         recent = list(theme.prefs.get("recent_colors", []))[:MAX_RECENT]
@@ -158,6 +178,16 @@ class ColorPicker(QFrame):
         lb = QLabel(text)
         lb.setProperty("role", "caption")
         return lb
+
+    def _palette(self, name: str) -> None:
+        while self.pal_box.count():
+            it = self.pal_box.takeAt(0)
+            if it.layout():
+                while it.layout().count():
+                    w = it.layout().takeAt(0).widget()
+                    if w:
+                        w.deleteLater()
+        self.pal_box.addLayout(self._grid(PALETTES.get(name, []), 6))
 
     def _grid(self, colors: list[str], cols: int) -> QGridLayout:
         g = QGridLayout()

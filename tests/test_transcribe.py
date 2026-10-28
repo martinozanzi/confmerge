@@ -135,3 +135,34 @@ def test_transcribe_wav_end_to_end(server, tmp_path):
     words = tr.transcribe_wav(tmp_path / "a.wav", "good", tmp_path / "w", "it", "", lambda f, m: prog.append(m), None, server)
     assert words and prog[-1].startswith("Trascrizione completata")
     assert not list((tmp_path / "w").glob("*.flac"))
+
+
+def test_translate_lines_with_fake_chat_server():
+    seen = []
+
+    class Chat(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            seen.append(req)
+            lines = json.loads(req["messages"][1]["content"])["lines"]
+            # traduce tutto tranne la riga 1, che «dimentica»: deve restare nella lingua originale
+            reply = {"lines": [{"i": x["i"], "t": "EN " + x["t"]} for x in lines if x["i"] != 1]}
+            raw = json.dumps({"choices": [{"message": {"content": json.dumps(reply)}}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+    srv = HTTPServer(("127.0.0.1", 0), Chat)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        lines = [tr.Line(0, 1, "ciao"), tr.Line(1, 2, "mondo"), tr.Line(2, 3, "bene")]
+        out = tr.translate_lines(lines, "en", "good", f"http://127.0.0.1:{srv.server_port}")
+        assert [x.text for x in out] == ["EN ciao", "mondo", "EN bene"]
+        assert [(x.start, x.end) for x in out] == [(0, 1), (1, 2), (2, 3)]
+        assert "English" not in seen[0]["messages"][0]["content"] and "Inglese" in seen[0]["messages"][0]["content"]
+    finally:
+        srv.shutdown()

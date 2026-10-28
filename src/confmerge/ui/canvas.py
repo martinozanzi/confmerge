@@ -57,6 +57,8 @@ class Canvas(QWidget):
         self._drag_off = QPointF()
         self._crop_drag: QPointF | None = None
         self._crop_rect: QRectF | None = None
+        state.spec_changed.connect(self.update)           # testi, immagini, sottotitoli: l'anteprima segue subito ogni modifica
+        state.profile_changed.connect(self.update)
 
     # --- dati
     def set_frame(self, img: QImage | None) -> None:
@@ -145,14 +147,18 @@ class Canvas(QWidget):
         if not st.enabled:
             return img
         sampling = time.monotonic() < self.state.subtitle_sample_until
+        t_in = 1.0                                           # secondi dall'inizio del sottotitolo (per l'animazione d'entrata)
         if sampling or not st.lines:                         # frase di esempio: si vede lo stile anche prima di creare i sottotitoli
             text = subtitles.SAMPLE_TEXT
+            if st.chunk_words:
+                text = " ".join(text.split()[:st.chunk_words])
         else:
-            ln = subtitles.active_line(st, self.state.from_out(self.out_t))
+            t_proj = self.state.from_out(self.out_t)
+            ln = subtitles.active_line(st, t_proj)
             if ln is None:
                 return img
-            text = ln.text
-        return compositor.render_frame([subtitles.preview_element(st, text, W, H, self.state.spec.brand.safe)], W, H, 1.0, 1e9, img)
+            text, t_in = ln.text, t_proj - ln.start
+        return compositor.render_frame([subtitles.preview_element(st, text, W, H, self.state.spec.brand.safe)], W, H, t_in, 1e9, img)
 
     def _is_social(self) -> bool:
         pr = self.state.project
@@ -324,6 +330,10 @@ class Canvas(QWidget):
             return self.elements_override
         return self.state.spec.graphics.elements
 
+    def _snap_safe(self):
+        """Area sicura per l'aggancio: quella comune alle piattaforme mostrate, altrimenti quella dell'anteprima."""
+        return self.safe_common if any(self.safe_common) else self.state.spec.brand.safe
+
     def _to_frame(self, pt: QPointF) -> QPointF:
         tr = self._target_rect()
         return QPointF((pt.x() - tr.x()) / tr.width(), (pt.y() - tr.y()) / tr.height())
@@ -378,9 +388,7 @@ class Canvas(QWidget):
             cx, cy = f.x() + off.x(), f.y() + off.y()
             self._guides = []
             if not (e.modifiers() & Qt.AltModifier):
-                cx, cy, self._guides = placement.snap(cx, cy, w / 2, h / 2, W, H, self.state.spec.brand.safe)
-            if kind == "sub":
-                cx = 0.5                                     # i sottotitoli restano al centro: si sposta solo l'altezza
+                cx, cy, self._guides = placement.snap(cx, cy, w / 2, h / 2, W, H, self._snap_safe())
             placement.place(self.state, kind, i, min(max(cx, 0.0), 1.0), min(max(cy, 0.0), 1.0), w, h, W, H)
             self.update()
             return

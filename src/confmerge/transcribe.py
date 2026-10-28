@@ -35,6 +35,14 @@ HALLUCINATIONS = ("sottotitoli creati dalla comunità", "sottotitoli e revisione
                   "grazie per la visione", "iscriviti al canale")
 
 
+LANGS = [("it", "Italiano"), ("en", "Inglese"), ("fr", "Francese"), ("es", "Spagnolo"), ("de", "Tedesco"),
+         ("pt", "Portoghese"), ("ro", "Rumeno"), ("sq", "Albanese"), ("ar", "Arabo"), ("ru", "Russo"), ("uk", "Ucraino"),
+         ("pl", "Polacco"), ("zh", "Cinese"), ("ja", "Giapponese")]
+LANG_NAMES = dict(LANGS)
+TRANSLATE_MODEL = "llama-3.1-8b-instant"       # economico: la traduzione di un video costa frazioni di centesimo
+TRANSLATE_BATCH = 30
+
+
 class TranscribeError(Exception):
     """Errore con un messaggio già adatto all'utente."""
 
@@ -210,6 +218,28 @@ def parse_words(data: dict, offset: float = 0.0) -> list[Word]:
     return words
 
 
+def split_words(lines: list[Line], n: int) -> list[Line]:
+    """Spezza ogni riga in gruppi di al massimo `n` parole, dividendo il tempo in proporzione alla lunghezza."""
+    if n <= 0:
+        return lines
+    out: list[Line] = []
+    for ln in lines:
+        toks = ln.text.split()
+        if len(toks) <= n:
+            out.append(ln)
+            continue
+        groups = [toks[i:i + n] for i in range(0, len(toks), n)]
+        if len(groups) > 1 and len(groups[-1]) == 1:                 # niente parola sola in coda: si unisce alla precedente
+            groups[-2] += groups.pop()
+        total = sum(len(" ".join(g)) + 1 for g in groups)
+        pos = ln.start
+        for g in groups:
+            d = (ln.end - ln.start) * (len(" ".join(g)) + 1) / total
+            out.append(Line(pos, pos + d, " ".join(g)))
+            pos += d
+    return out
+
+
 def build_lines(words: list[Word], max_chars: int = 40, max_dur: float = 6.0, gap: float = 0.8) -> list[Line]:
     """Raggruppa le parole in sottotitoli: a fine frase, dopo una pausa o quando la riga diventa troppo lunga."""
     lines: list[Line] = []
@@ -232,6 +262,39 @@ def build_lines(words: list[Word], max_chars: int = 40, max_dur: float = 6.0, ga
     for a, b in zip(lines, lines[1:]):                         # nessuna sovrapposizione fra righe
         a.end = min(a.end, b.start)
     return [ln for ln in lines if ln.end - ln.start > 0.05]
+
+
+# ------------------------------------------------------------------------------------------------ traduzione
+def translate_texts(texts: list[str], target: str, key: str, source: str = "", base_url: str | None = None) -> list[str]:
+    """Traduce le righe nella lingua `target` (codice) con un modello economico di Groq. Se una riga non torna indietro
+    resta nella lingua originale: i sottotitoli non si perdono mai."""
+    name = LANG_NAMES.get(target, target)
+    out = list(texts)
+    for a in range(0, len(texts), TRANSLATE_BATCH):
+        batch = [{"i": i, "t": texts[i]} for i in range(a, min(a + TRANSLATE_BATCH, len(texts)))]
+        system = (f"You translate video subtitles into {name}. You receive a JSON object with a list 'lines' of "
+                  "{i, t}. Reply with a JSON object {\"lines\": [{\"i\": ..., \"t\": ...}]} with the same i values and each "
+                  "t translated: natural, concise, no notes, no extra lines. Keep names of people and places.")
+        body = json.dumps({"model": TRANSLATE_MODEL, "temperature": 0, "response_format": {"type": "json_object"},
+                           "messages": [{"role": "system", "content": system},
+                                        {"role": "user", "content": json.dumps({"lines": batch}, ensure_ascii=False)}]}).encode()
+        req = urllib.request.Request(_base(base_url) + "/chat/completions", data=body, method="POST", headers={
+            "Authorization": f"Bearer {key.strip()}", "Content-Type": "application/json", "User-Agent": USER_AGENT})
+        data = _call(req)
+        try:
+            reply = json.loads(data["choices"][0]["message"]["content"])
+            for item in reply.get("lines", []):
+                i, t = int(item["i"]), str(item["t"]).strip()
+                if a <= i < a + TRANSLATE_BATCH and i < len(out) and t:
+                    out[i] = t
+        except (KeyError, IndexError, TypeError, ValueError) as e:
+            log.warning("Traduzione non comprensibile: %s", e)
+    return out
+
+
+def translate_lines(lines: list[Line], target: str, key: str, base_url: str | None = None) -> list[Line]:
+    texts = translate_texts([ln.text for ln in lines], target, key, base_url=base_url)
+    return [Line(ln.start, ln.end, t) for ln, t in zip(lines, texts)]
 
 
 # ------------------------------------------------------------------------------------------------ percorso completo

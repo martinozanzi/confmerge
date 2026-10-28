@@ -83,7 +83,13 @@ class SubtitleSettings:
     box_opacity: float = 0.65
     position: str = "bottom"       # bottom | middle | top
     margin: float = 0.085          # distanza dal bordo (frazione dell'altezza)
+    x: float = 0.5                 # centro trascinato a mano (frazioni del fotogramma); vale solo se y >= 0
+    y: float = -1.0                # -1 = segue «position» e «margin»
     uppercase: bool = False
+    chunk_words: int = 0           # 0 = una frase per volta; 2-3 = poche parole alla volta, come nei reel
+    anim: str = "none"             # none | fade | pop: come entra ogni sottotitolo
+    source_lang: str = "it"        # lingua parlata nel video ("" = la riconosce da sola)
+    lang: str = ""                 # lingua dei sottotitoli ("" = la stessa del video: altrimenti si traducono)
     max_chars: int = 38            # lunghezza massima di una riga quando si creano i sottotitoli
     range_start: float = 0.0       # intervallo trascritto (secondi del progetto)
     range_end: float = 0.0

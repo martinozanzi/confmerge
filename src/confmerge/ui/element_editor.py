@@ -22,8 +22,9 @@ class ElementEditor(QWidget):
     changed = Signal()
     textLikeChanged = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, show_targets: bool = True, show_timing: bool = True):
         super().__init__(parent)
+        self.show_targets, self.show_timing = show_targets, show_timing
         self.el: Element | None = None
         self.frame_wh = (1920, 1080)
         outer = QVBoxLayout(self)
@@ -57,8 +58,9 @@ class ElementEditor(QWidget):
         f.addRow("Y (%)", bind.spin(el, "y", -20, 120, 0.5, 1, "", 100, cb))
         f.addRow("Rotazione (°)", bind.spin(el, "rotation", -360, 360, 1, 1, "", 1, cb))
         f.addRow("Opacità (%)", bind.spin(el, "opacity", 0, 1, 0.05, 2, "", 1, cb))
-        f.addRow("Inizio (s)", bind.spin(el, "start", 0, 36000, 0.5, 2, "", 1, cb))
-        f.addRow("Fine (s)", self._end_spin(el))
+        if self.show_timing:
+            f.addRow("Inizio (s)", bind.spin(el, "start", 0, 36000, 0.5, 2, "", 1, cb))
+            f.addRow("Fine (s)", self._end_spin(el))
         self.lay.addWidget(gen)
         if el.kind == "text":
             self._text(el)
@@ -68,7 +70,8 @@ class ElementEditor(QWidget):
             self._shape(el)
         elif el.kind == "bar":
             self._bar(el)
-        self._targets(el)
+        if self.show_targets:
+            self._targets(el)
         self._anims(el)
         self.lay.addStretch(1)
 

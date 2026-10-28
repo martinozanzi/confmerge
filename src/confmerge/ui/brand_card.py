@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QComboBox, QHBoxLayout
 
 from .. import brand
-from ..brand_kit import CORNERS
+from ..brand_kit import CORNERS, ROLE_SHORT
 from .brand_dialog import BrandDialog
 from .widgets import Card, SecondaryButton, Toggle, label
 
@@ -50,7 +50,7 @@ class BrandCard(Card):
             if it.widget():
                 it.widget().deleteLater()
         for lg in st.spec.brand.logos:
-            t = Toggle(f"Mostra: {lg.name or 'logo'}")
+            t = Toggle(f"Mostra il {ROLE_SHORT.get(lg.role, 'logo').lower()}" + (f" ({lg.name})" if lg.name else ""))
             t.setChecked(lg.enabled)
             t.toggled.connect(lambda on, l=lg: (setattr(l, "enabled", on), st.touch()))
             self.logos_box.lay.addWidget(t)

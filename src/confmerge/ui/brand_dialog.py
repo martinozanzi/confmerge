@@ -180,7 +180,9 @@ class BrandDialog(QDialog):
         self.ed_lay.addWidget(c3)
         c4 = Card()
         c4.add(label("Loghi", "h2", True))
-        c4.add(label("Meglio PNG con sfondo trasparente. Il «simbolo» è quello del partito o del movimento.", "caption", True))
+        c4.add(label("Il LOGO è il marchio completo, di solito largo, con il nome (es. «Lista Rossi Sindaco»). Il SIMBOLO è solo "
+                         "l'emblema, piccolo e quadrato (es. lo stemma o il simbolo del partito). Sul video vanno entrambi, in "
+                         "angoli diversi. Meglio PNG con sfondo trasparente.", "caption", True))
         self.logo_box = QVBoxLayout()
         c4.lay.addLayout(self.logo_box)
         add = SecondaryButton("Aggiungi un logo…", "image-plus")
@@ -191,8 +193,8 @@ class BrandDialog(QDialog):
         c5 = Card()
         c5.add(label("Dove si mettono sul video", "h2", True))
         f = QFormLayout()
-        f.addRow("Logo principale", bind.combo(kit, "main_corner", [(v, k) for k, v in CORNERS.items()], cb))
-        f.addRow("Simbolo", bind.combo(kit, "symbol_corner", [(v, k) for k, v in CORNERS.items()], cb))
+        f.addRow("Logo (nome + disegno)", bind.combo(kit, "main_corner", [(v, k) for k, v in CORNERS.items()], cb))
+        f.addRow("Simbolo (stemma)", bind.combo(kit, "symbol_corner", [(v, k) for k, v in CORNERS.items()], cb))
         f.addRow("Grandezza (%)", bind.spin(kit, "logo_size", 4, 30, 0.5, 1, "", 100, cb))
         c5.lay.addLayout(f)
         self.ed_lay.addWidget(c5)

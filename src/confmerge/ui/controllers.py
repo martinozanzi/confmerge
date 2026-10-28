@@ -732,6 +732,7 @@ class SubtitleController(QObject):
         max_chars = st.spec.subtitles.max_chars
         vocab = self._vocabulary()
         D = t1 - t0
+        src_lang, out_lang = st.spec.subtitles.source_lang, st.spec.subtitles.lang
 
         def job(cancel, report):
             work = paths.temp_dir() / "subs"
@@ -747,9 +748,13 @@ class SubtitleController(QObject):
                 chain = ",".join([pl.audio_filter(p, t0), f"atrim=end={D:.4f}", "asetpts=PTS-STARTPTS",
                                   "aformat=sample_rates=16000:channel_layouts=mono"])
                 run_ffmpeg(["-i", str(p.audio), "-vn", "-af", chain, "-c:a", "pcm_s16le", str(wav)], cancel=cancel)
-            words = transcribe.transcribe_wav(wav, key, work, "it", vocab,
-                                              lambda f, m: report(0.05 + 0.9 * f, m), cancel)
-            return transcribe.build_lines(words, max_chars=max_chars), t0, t1
+            words = transcribe.transcribe_wav(wav, key, work, src_lang, vocab,
+                                              lambda f, m: report(0.05 + 0.85 * f, m), cancel)
+            lines = transcribe.build_lines(words, max_chars=max_chars)
+            if out_lang and out_lang != src_lang and lines:
+                report(0.92, f"Traduco in {transcribe.LANG_NAMES.get(out_lang, out_lang)}…")
+                lines = transcribe.translate_lines(lines, out_lang, key)
+            return lines, t0, t1
 
         self.worker = Worker(job)
         self.worker.progress.connect(self.progress)

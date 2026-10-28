@@ -51,15 +51,53 @@ def test_center_buttons_element_logo_and_subtitle(st):
     assert el.x == pytest.approx(0.5, abs=1e-3)
     st.spec.subtitles.enabled = True
     placement.center(st, "sub", 0, W, H, False, True)
-    assert st.spec.subtitles.position == "middle"
+    assert st.spec.subtitles.y == pytest.approx(0.5, abs=1e-3) and st.spec.subtitles.x == pytest.approx(0.5, abs=1e-3)
+    placement.center(st, "sub", 0, W, H, True, True, (0.1, 0.3, 0.0, 0.0))                 # area sicura: più in alto
+    assert st.spec.subtitles.y == pytest.approx(0.4)
 
 
-def test_subtitle_drag_sets_position_and_margin(st):
+def test_subtitle_drag_is_free_in_both_directions(st):
+    from confmerge import subtitles as S
     st.spec.subtitles.enabled = True
-    placement.place(st, "sub", 0, 0.5, 0.1, 0.8, 0.1, 720, 1280)
-    assert st.spec.subtitles.position == "top" and st.spec.subtitles.margin == pytest.approx(0.05)
-    placement.place(st, "sub", 0, 0.5, 0.9, 0.8, 0.1, 720, 1280)
-    assert st.spec.subtitles.position == "bottom" and st.spec.subtitles.margin == pytest.approx(0.05)
+    placement.place(st, "sub", 0, 0.3, 0.38, 0.8, 0.1, 720, 1280)
+    sb = st.spec.subtitles
+    assert (sb.x, sb.y) == (0.3, 0.38)
+    el = S.preview_element(sb, "ciao", 720, 1280)
+    assert (el.x, el.y) == (0.3, 0.38)
+    sb.lines = [__import__("confmerge.spec", fromlist=["SubLine"]).SubLine(0, 2, "ciao")]
+    assert "\\an5\\pos(216.0,486.4)" in S.to_ass(sb, 0.0, 10.0, 720, 1280)
+    sb.x, sb.y = 0.5, -1.0
+    assert "\\pos" not in S.to_ass(sb, 0.0, 10.0, 720, 1280)
+
+
+def test_canvas_repaints_when_spec_changes(st):
+    from confmerge.ui.canvas import Canvas
+    hits = []
+
+    class Spy(Canvas):
+        def update(self, *a):
+            hits.append(1)
+
+    cv = Spy(st)
+    hits.clear()
+    st.spec_changed.emit()
+    assert hits
+
+
+def test_palettes_and_free_subtitle_in_landscape(qapp):
+    from confmerge.ui.color_picker import PALETTES
+    assert len(PALETTES) >= 5 and all(len(v) == 6 for v in PALETTES.values())
+    s = AppState(kind="social")
+    s.spec.image.aspect = "16:9"
+    s.spec.subtitles.enabled = True
+    from confmerge.ui.canvas import Canvas
+    cv = Canvas(s)
+    cv.resize(500, 320)
+    W, H = cv.frame_size()
+    assert W > H
+    cx, cy, _ = placement.snap(0.6, 0.5, 0.2, 0.05, W, H, (0, 0, 0, 0))
+    placement.place(s, "sub", 0, cx, cy, 0.4, 0.1, W, H)
+    assert s.spec.subtitles.x == 0.6
 
 
 def test_mouse_drag_on_canvas(st):
