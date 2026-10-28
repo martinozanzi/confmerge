@@ -296,6 +296,15 @@ class MainWindow(QMainWindow):
             self._menu_icons.append((a, icon))
             a.triggered.connect(fn)
             h.addAction(a)
+        a = QAction(theme.icon("download", theme.t.text2), "Cerca &aggiornamenti…", self)
+        self._menu_icons.append((a, "download"))
+        a.triggered.connect(lambda: self.check_updates(manual=True))
+        h.addAction(a)
+        self.act_auto_update = QAction("Cerca gli aggiornamenti all'avvio", self)
+        self.act_auto_update.setCheckable(True)
+        self.act_auto_update.setChecked(bool(theme.prefs.get("update_check", True)))
+        self.act_auto_update.toggled.connect(lambda on: theme.prefs.set("update_check", bool(on)))
+        h.addAction(self.act_auto_update)
         h.addSeparator()
         a = QAction(theme.icon("info", theme.t.text2), "&Informazioni", self)
         a.triggered.connect(lambda: AboutDialog(self).exec())
@@ -465,6 +474,55 @@ class MainWindow(QMainWindow):
         if not self._recovery_checked:
             self._recovery_checked = True
             QTimer.singleShot(600, self._offer_recovery)
+            QTimer.singleShot(5000, self.check_updates)
+
+    # --- aggiornamenti (una sola richiesta a GitHub, al massimo ogni 20 ore; mai se spento)
+    def check_updates(self, manual: bool = False):
+        if not manual:
+            if os.environ.get("CONFMERGE_NO_UPDATE_CHECK") or not theme.prefs.get("update_check", True):
+                return
+            if time.time() - float(theme.prefs.get("update_checked_at", 0)) < 20 * 3600:
+                return
+        from .update_check import UpdateChecker
+        self._updater = UpdateChecker(self)
+        self._updater.done.connect(lambda rel, err: self._update_result(rel, err, manual))
+        self._updater.start()
+
+    def _update_result(self, rel, err: str, manual: bool):
+        if not err:
+            theme.prefs.set("update_checked_at", time.time())
+        if err:
+            if manual:
+                QMessageBox.information(self, "Aggiornamenti", err)
+            return
+        if rel is None:
+            if manual:
+                from .. import __version__
+                QMessageBox.information(self, "Aggiornamenti", f"Hai già l'ultima versione ({__version__}).")
+            return
+        if not manual and theme.prefs.get("update_skipped", "") == rel.tag:
+            return
+        from .. import __version__
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Information)
+        box.setWindowTitle("Nuova versione disponibile")
+        box.setText(f"È uscita la versione {rel.tag.lstrip('v')} di ConfMerge (tu hai la {__version__}).")
+        box.setInformativeText("Scarica il file e sostituisci quello che usi adesso: i tuoi progetti non cambiano.")
+        go = box.addButton("Scarica", QMessageBox.AcceptRole)
+        notes = box.addButton("Novità", QMessageBox.HelpRole)
+        later = box.addButton("Più tardi", QMessageBox.RejectRole)
+        skip = box.addButton("Salta questa versione", QMessageBox.DestructiveRole)
+        box.exec()
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        c = box.clickedButton()
+        if c is go:
+            QDesktopServices.openUrl(QUrl(rel.download))
+        elif c is notes:
+            QDesktopServices.openUrl(QUrl(rel.page))
+        elif c is skip:
+            theme.prefs.set("update_skipped", rel.tag)
+        del later
 
     def _offer_recovery(self):
         from ..autosave import clear_recovery, has_recovery, recovery_file, recovery_info

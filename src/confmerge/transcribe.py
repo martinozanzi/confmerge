@@ -59,6 +59,7 @@ class Line:
     start: float
     end: float
     text: str
+    times: list[float] | None = None      # inizio di ogni parola, se noto
 
 
 def estimate_cost(seconds: float) -> float:
@@ -230,10 +231,18 @@ def split_words(lines: list[Line], n: int) -> list[Line]:
             continue
         groups = [toks[i:i + n] for i in range(0, len(toks), n)]
         if len(groups) > 1 and len(groups[-1]) == 1:                 # niente parola sola in coda: si unisce alla precedente
-            groups[-2] += groups.pop()
+            tail = groups.pop()
+            groups[-1] += tail
+        known = ln.times if ln.times and len(ln.times) == len(toks) else None
         total = sum(len(" ".join(g)) + 1 for g in groups)
-        pos = ln.start
+        pos, k = ln.start, 0
         for g in groups:
+            if known:                                                # tempi veri delle parole: il gruppo parte dalla prima
+                a = known[k]
+                b = known[k + len(g)] if k + len(g) < len(known) else ln.end
+                out.append(Line(a, b, " ".join(g), known[k:k + len(g)]))
+                k += len(g)
+                continue
             d = (ln.end - ln.start) * (len(" ".join(g)) + 1) / total
             out.append(Line(pos, pos + d, " ".join(g)))
             pos += d
@@ -247,7 +256,7 @@ def build_lines(words: list[Word], max_chars: int = 40, max_dur: float = 6.0, ga
 
     def flush():
         if cur:
-            lines.append(Line(cur[0].start, cur[-1].end, " ".join(w.text for w in cur)))
+            lines.append(Line(cur[0].start, cur[-1].end, " ".join(w.text for w in cur), [w.start for w in cur]))
             cur.clear()
 
     for w in words:
@@ -294,7 +303,7 @@ def translate_texts(texts: list[str], target: str, key: str, source: str = "", b
 
 def translate_lines(lines: list[Line], target: str, key: str, base_url: str | None = None) -> list[Line]:
     texts = translate_texts([ln.text for ln in lines], target, key, base_url=base_url)
-    return [Line(ln.start, ln.end, t) for ln, t in zip(lines, texts)]
+    return [Line(ln.start, ln.end, t) for ln, t in zip(lines, texts)]      # tradotte: i tempi delle parole non valgono più
 
 
 # ------------------------------------------------------------------------------------------------ percorso completo

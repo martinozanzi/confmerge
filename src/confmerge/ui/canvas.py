@@ -147,18 +147,19 @@ class Canvas(QWidget):
         if not st.enabled:
             return img
         sampling = time.monotonic() < self.state.subtitle_sample_until
-        t_in = 1.0                                           # secondi dall'inizio del sottotitolo (per l'animazione d'entrata)
+        t_in, hl = 1.0, -1                                   # secondi dall'inizio del sottotitolo; parola evidenziata
         if sampling or not st.lines:                         # frase di esempio: si vede lo stile anche prima di creare i sottotitoli
             text = subtitles.SAMPLE_TEXT
             if st.chunk_words:
                 text = " ".join(text.split()[:st.chunk_words])
+            hl = min(1, len(text.split()) - 1)
         else:
             t_proj = self.state.from_out(self.out_t)
             ln = subtitles.active_line(st, t_proj)
             if ln is None:
                 return img
-            text, t_in = ln.text, t_proj - ln.start
-        return compositor.render_frame([subtitles.preview_element(st, text, W, H, self.state.spec.brand.safe)], W, H, t_in, 1e9, img)
+            text, t_in, hl = ln.text, t_proj - ln.start, subtitles.word_index(ln, t_proj)
+        return compositor.render_frame([subtitles.preview_element(st, text, W, H, self.state.spec.brand.safe, hl)], W, H, t_in, 1e9, img)
 
     def _is_social(self) -> bool:
         pr = self.state.project

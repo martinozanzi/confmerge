@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSlider
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QSlider, QVBoxLayout
 
 from .. import subtitles as S
 from .widgets import Card, PrimaryButton, ProgressBarThin, SecondaryButton, Segmented, Toggle, label
@@ -60,6 +60,31 @@ class SubtitleCard(Card):
             self.anim.addItem(v, k)
         self.anim.currentIndexChanged.connect(self._anim)
         self.add(self.anim)
+        # aspetto: carattere e colori
+        from PySide6.QtWidgets import QFontComboBox, QLabel, QWidget
+        self.add(label("Carattere", ""))
+        self.font = QFontComboBox()
+        self.font.currentFontChanged.connect(self._font)
+        self.add(self.font)
+        self.colors = QWidget()
+        cl = QHBoxLayout(self.colors)
+        cl.setContentsMargins(0, 0, 0, 0)
+        self._color_btns = {}
+        for attr, text in (("color", "Testo"), ("outline_color", "Bordo"), ("hl_color", "Evidenziata")):
+            col = QVBoxLayout()
+            col.addWidget(label(text, "caption"))
+            btn = self._color_button(attr)
+            self._color_btns[attr] = (btn, col)
+            col.addWidget(btn)
+            cl.addLayout(col)
+        cl.addStretch(1)
+        self.add(self.colors)
+        self.out_lbl = label("", "", True)
+        self.add(self.out_lbl)
+        self.outline = QSlider(Qt.Horizontal)
+        self.outline.setRange(0, 15)                        # spessore del bordo: 0 … 1,5 % dell'altezza
+        self.outline.valueChanged.connect(self._outline)
+        self.add(self.outline)
         # grandezza
         self.size_lbl = label("", "", True)
         self.add(self.size_lbl)
@@ -129,6 +154,14 @@ class SubtitleCard(Card):
         self.margin.setValue(round(s.margin * 1000))
         self.margin.blockSignals(False)
         self.pos.setValue(s.position)
+        self.outline.blockSignals(True)
+        self.outline.setValue(round(s.outline * 1000))
+        self.outline.blockSignals(False)
+        self.font.blockSignals(True)
+        from PySide6.QtGui import QFont
+        self.font.setCurrentFont(QFont(s.font))
+        self.font.blockSignals(False)
+        self._sync_colors()
         for cb, v in ((self.src, s.source_lang), (self.out, s.lang), (self.chunk, s.chunk_words), (self.anim, s.anim)):
             cb.blockSignals(True)
             cb.setCurrentIndex(max(0, cb.findData(v)))
@@ -142,6 +175,10 @@ class SubtitleCard(Card):
 
     def _labels(self):
         s = self.sub()
+        self.out_lbl.setText(f"Spessore del bordo: {self.sub().outline * 100:.1f} %".replace(".", ","))
+        for attr, (btn, col) in self._color_btns.items():
+            btn.setVisible(attr != "hl_color" or self.sub().anim == "highlight")
+            col.itemAt(0).widget().setVisible(btn.isVisible())
         self.size_lbl.setText(f"Grandezza: {s.size * 100:.1f} % dell'altezza".replace(".", ","))
         self.margin_lbl.setText(f"Distanza dal bordo: {s.margin * 100:.0f} %")
         self.margin.setVisible(s.position != "middle")
@@ -173,6 +210,48 @@ class SubtitleCard(Card):
     def _size(self, v: int):
         self.sub().size = v / 1000
         self.sub().enabled = True
+        self._labels()
+        self._sample()
+
+    def _color_button(self, attr: str):
+        """Pulsante-campione che legge e scrive sempre l'impostazione corrente (anche dopo un nuovo modello di stile)."""
+        from PySide6.QtWidgets import QPushButton
+        from .color_picker import ColorPicker
+        from .theme import theme
+        btn = QPushButton()
+        btn.setMinimumWidth(72)
+        btn.setToolTip("Clicca per scegliere il colore")
+
+        def paint():
+            btn.setStyleSheet(f"background:{getattr(self.sub(), attr)}; border:1px solid {theme.t.border}; border-radius:8px;")
+        btn.paint = paint                                   # type: ignore[attr-defined]
+
+        def pick():
+            pk = ColorPicker(getattr(self.sub(), attr), btn)
+
+            def live(c: str):
+                setattr(self.sub(), attr, c)
+                self.sub().enabled = True
+                paint()
+                self._sample()
+            pk.colorChanged.connect(live)
+            pk.show_below(btn)
+        btn.clicked.connect(pick)
+        paint()
+        return btn
+
+    def _sync_colors(self):
+        for btn, _ in self._color_btns.values():
+            btn.paint()
+        self._labels()
+
+    def _font(self, f):
+        self.sub().font = f.family()
+        self.sub().enabled = True
+        self._sample()
+
+    def _outline(self, v: int):
+        self.sub().outline = v / 1000
         self._labels()
         self._sample()
 

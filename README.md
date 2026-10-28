@@ -38,7 +38,9 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    sicura (tieni premuto Alt per muoverli liberamente), anche in orizzontale; i pulsanti **Centra ↔ / ↕** li mettono al centro dell'**area
    sicura** (la linea verde) oppure di tutto il video. Ogni testo ha **Aspetto…** con carattere, colori, contorno, ombra, sfondo e animazione.
    I **sottotitoli** hanno la lingua del video e quella dei sottotitoli (se diversa si traducono con Groq), «parole per volta» (2-3 come
-   nei reel) e un'animazione d'entrata (dissolvenza o pop); lo stile **Reel a blocchi** le mette insieme. I selettori colore hanno **palette pronte**.
+   nei reel) e un'animazione d'entrata (dissolvenza, pop o **parola evidenziata**: quella che si sta dicendo si colora e si ingrandisce);
+   gli stili **Reel a blocchi** e **Parola evidenziata** le mettono insieme. Si scelgono anche carattere, colore del testo, del bordo (con spessore) e
+   della parola evidenziata. I selettori colore hanno **palette pronte**.
    Nel kit del marchio il **logo** è il marchio completo con il nome, il **simbolo** solo lo stemma/emblema.
    Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
