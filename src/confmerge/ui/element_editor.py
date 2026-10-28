@@ -64,8 +64,10 @@ class ElementEditor(QWidget):
         self.lay.addWidget(gen)
         if el.kind == "text":
             self._text(el)
-        elif el.kind == "image":
+        elif el.kind in ("image", "clip"):
             self._image(el)
+            if el.kind == "clip":
+                self.lay.insertWidget(self.lay.count(), bind.check(el, "loop", "Si ripete finché è visibile", cb))
         elif el.kind == "shape":
             self._shape(el)
         elif el.kind == "bar":
@@ -149,7 +151,7 @@ class ElementEditor(QWidget):
         btn = QPushButton("Scegli…")
 
         def pick():
-            p, _ = QFileDialog.getOpenFileName(self, "Immagine", "", "Immagini (*.png *.svg *.jpg *.jpeg)")
+            p, _ = QFileDialog.getOpenFileName(self, "Immagine", "", "Immagini e overlay (*.png *.svg *.jpg *.jpeg *.webp *.gif *.webm *.mov)")
             if p:
                 el.path = p
                 le.setText(p)

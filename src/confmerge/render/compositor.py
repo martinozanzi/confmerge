@@ -108,7 +108,7 @@ def plan_layers(elements: list[Element], W: int, H: int, seg_dur: float, fps: fl
     workdir.mkdir(parents=True, exist_ok=True)
     layers: list[Layer] = []
     for i, el in enumerate(elements):
-        if not el.visible:
+        if not el.visible or el.kind == "clip":                 # i clip animati entrano nel filtergraph come video (graph.py)
             continue
         a = el.start
         b = seg_dur if el.end is None else min(el.end, seg_dur)

@@ -52,8 +52,38 @@ def blur_image(img: QImage, radius_px: float) -> QImage:
     return out
 
 
+VIDEO_OVERLAY_EXT = {".webm", ".mov", ".mp4", ".m4v", ".gif", ".apng"}
+
+
+@lru_cache(maxsize=32)
+def overlay_still(path: str) -> str:
+    """Primo fotogramma (con la trasparenza) di un overlay animato: serve all'anteprima. Restituisce il percorso del PNG."""
+    import hashlib
+    import subprocess
+    import tempfile
+    from pathlib import Path as P
+    from .. import ffmpeg_wrapper as fw
+    out = P(tempfile.gettempdir()) / f"confmerge_still_{hashlib.sha1(path.encode()).hexdigest()[:12]}.png"
+    if not out.exists():
+        pre = ["-c:v", "libvpx-vp9"] if path.lower().endswith(".webm") else []     # il decoder predefinito perde la trasparenza
+        for args in (pre, []):
+            r = subprocess.run([fw.ffmpeg_path(), "-v", "error", "-nostdin", "-y", *args, "-i", path, "-frames:v", "1", str(out)],
+                               capture_output=True, timeout=30, creationflags=fw._CREATIONFLAGS)
+            if r.returncode == 0 and out.exists():
+                break
+    return str(out) if out.exists() else ""
+
+
+def is_video_overlay(path: str) -> bool:
+    return bool(path) and path[path.rfind("."):].lower() in VIDEO_OVERLAY_EXT
+
+
 @lru_cache(maxsize=64)
 def _load_image(path: str, px_w: int, px_h: int = 0) -> QImage | None:
+    if is_video_overlay(path):
+        path = overlay_still(path)
+        if not path:
+            return None
     if path.lower().endswith(".svg"):
         from PySide6.QtSvg import QSvgRenderer
         r = QSvgRenderer(path)
@@ -284,7 +314,7 @@ def render_element(el: Element, W: int, H: int, st: AnimState | None = None) -> 
         if st.reveal < 1.0:
             p.setClipRect(QRectF(bbox.left() - 4, bbox.top() - 4, bbox.width() * st.reveal + 8, bbox.height() + 8))
         _draw_text_content(p, el, W, H, st, blk)
-    elif el.kind == "image":
+    elif el.kind in ("image", "clip"):
         px = max(1, round(el.width * W))
         img = _load_image(el.path, px) if el.path else None
         bbox = QRectF(0, 0, px, img.height() if img else px * 0.6)
@@ -303,7 +333,7 @@ def render_element(el: Element, W: int, H: int, st: AnimState | None = None) -> 
     out = content
     if st.blur > 0:
         out = blur_image(out, st.blur * H)
-    if el.shadow.enabled and el.kind in ("text", "image", "shape"):
+    if el.shadow.enabled and el.kind in ("text", "image", "clip", "shape"):
         sh = content.copy()
         q = QPainter(sh)
         q.setCompositionMode(QPainter.CompositionMode_SourceIn)
@@ -326,7 +356,7 @@ def element_bbox(el: Element, W: int, H: int) -> QRectF:
     if el.kind == "text":
         r = _Block(el, W, H).rect
         return r.adjusted(-6, -6, 6, 6)
-    if el.kind == "image":
+    if el.kind in ("image", "clip"):
         px = max(1, round(el.width * W))
         img = _load_image(el.path, px) if el.path else None
         r = QRectF(0, 0, px, img.height() if img else px * 0.6)

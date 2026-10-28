@@ -41,6 +41,9 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    nei reel) e un'animazione d'entrata (dissolvenza, pop o **parola evidenziata**: quella che si sta dicendo si colora e si ingrandisce);
    gli stili **Reel a blocchi** e **Parola evidenziata** le mettono insieme. Si scelgono anche carattere, colore del testo, del bordo (con spessore) e
    della parola evidenziata. I selettori colore hanno **palette pronte**.
+   **Due video nello stesso reel**: la scheda omonima mette un secondo video sopra o sotto il tuo (altezza dei riquadri, inquadratura e punto di
+   partenza del secondo, audio facoltativo con volume; se è più corto si ripete). **Overlay**: immagini o video con sfondo trasparente (PNG, GIF,
+   WebM, MOV), quanti vuoi, con inizio/fine e animazione; con **Salva** un overlay entra nella raccolta e si riaggiunge con un clic in altri lavori.
    Nel kit del marchio il **logo** è il marchio completo con il nome, il **simbolo** solo lo stemma/emblema.
    Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.
@@ -55,7 +58,9 @@ clic un titolo e una schermata finale del marchio. I kit si esportano e importan
 
 **Miniature YouTube** (pulsante «Miniatura YouTube…» in Esporta): 8 layout pronti (titolo sull'immagine, immagine e titolo a lato,
 titolo evidenziato, fascia in diagonale, evento, citazione, dato in evidenza, solo titolo) con un fotogramma del video a scelta,
-i colori e i loghi del marchio e l'anteprima piccola come appare su YouTube. Si salva JPG (sotto i 2 MB) e PNG 1280×720.
+i colori e i loghi del marchio e l'anteprima piccola come appare su YouTube. Si personalizzano grandezza e posizione dei testi, colore di titolo e
+frase, colori del layout (principale, evidenza, sfondo), qualsiasi carattere installato, foto più scura o con colori più vivi/spenti, e si
+aggiungono **testi e immagini** (anche PNG trasparenti) da trascinare sull'anteprima con aggancio al centro e ai terzi. Si salva JPG (sotto i 2 MB) e PNG 1280×720.
 
 Le misure delle piattaforme (formato, durata massima, zone di sicurezza) sono approssimative e cambiano: si possono correggere
 con un file `piattaforme.json` nella cartella delle impostazioni, per esempio

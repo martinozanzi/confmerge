@@ -33,6 +33,14 @@ class Fields:
     uppercase: bool = True
     frame_x: float = 0.5          # parte del fotogramma da mostrare (0 = sinistra, 1 = destra)
     logos: list[tuple[str, str]] = field(default_factory=list)      # (percorso, ruolo: main | symbol)
+    size_scale: float = 1.0       # ingrandisce o rimpicciolisce i testi del layout
+    dx: float = 0.0               # sposta i testi (frazione della larghezza / dell'altezza)
+    dy: float = 0.0
+    title_color: str = ""         # vuoto = quello del layout
+    sub_color: str = ""
+    dim: float = 0.0              # scurisce la foto (0 … 0,7)
+    saturation: float = 1.0       # colori della foto più vivi (>1) o spenti (<1)
+    extras: list[Element] = field(default_factory=list)             # testi e immagini aggiunti a mano, liberi sulla miniatura
 
 
 @dataclass
@@ -233,6 +241,21 @@ def _logo_elements(f: Fields, corners: tuple[str, str]) -> list[Element]:
     return out
 
 
+def adjust_frame(frame: QImage | None, dim: float, saturation: float) -> QImage | None:
+    """Foto più scura o con i colori più vivi/spenti: serve a far risaltare il titolo."""
+    if frame is None or frame.isNull() or (dim <= 0.001 and abs(saturation - 1.0) < 0.01):
+        return frame
+    import numpy as np
+    img = frame.convertToFormat(QImage.Format_ARGB32).copy()
+    w, h = img.width(), img.height()
+    arr = np.frombuffer(img.bits(), np.uint8).reshape(h, img.bytesPerLine() // 4, 4)[:, :w].astype(np.float32)   # B G R A
+    rgb = arr[..., 2::-1]
+    gray = (rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114)[..., None]       # colori vivi o spenti, poi più scuro
+    out = np.clip((gray + (rgb - gray) * saturation) * (1.0 - dim), 0, 255).astype(np.uint8)
+    res = np.ascontiguousarray(np.dstack([out[..., 2], out[..., 1], out[..., 0], arr[..., 3].astype(np.uint8)]))
+    return QImage(res.data, w, h, w * 4, QImage.Format_ARGB32).copy()
+
+
 def render(layout_id: str, frame: QImage | None, fields: Fields, palette: Palette | None = None,
            width: int = W, height: int = H) -> QImage:
     """Miniatura finita. `width`/`height` solo per le anteprime piccole (le proporzioni sono sempre 16:9)."""
@@ -242,8 +265,21 @@ def render(layout_id: str, frame: QImage | None, fields: Fields, palette: Palett
     img.fill(QColor(pal.colors.background))
     p = QPainter(img)
     p.setRenderHint(QPainter.Antialiasing)
+    if frame is not None and (fields.dim > 0.001 or abs(fields.saturation - 1.0) > 0.01):
+        small = frame.scaled(W, H, Qt.KeepAspectRatioByExpanding, Qt.FastTransformation) if frame.width() > W else frame
+        frame = adjust_frame(small, fields.dim, fields.saturation)
     els = lay.draw(p, frame, fields, pal)
     p.end()
+    for e in els:                                                    # personalizzazioni sopra il layout scelto
+        if e.kind != "text":
+            continue
+        e.size *= fields.size_scale
+        e.x, e.y = e.x + fields.dx, e.y + fields.dy
+        if fields.title_color and e.id in ("t", "q"):
+            e.fill.color = fields.title_color
+        if fields.sub_color and e.id == "s":
+            e.fill.color = fields.sub_color
     els += _logo_elements(fields, lay.logo_corners)
+    els += [e for e in fields.extras if e.visible]
     out = compositor.render_frame(els, W, H, 0.0, 1e9, img)
     return out if (width, height) == (W, H) else out.scaled(width, height, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)

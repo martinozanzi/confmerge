@@ -17,6 +17,7 @@ from .graphics_page import scrolled
 from .music_card import MusicCard
 from .player import PlayerWidget
 from .social_style import OverlaysCard, StyleTemplateCard
+from .split_card import SplitCard
 from .subtitles_tab import SimpleSubtitlesCard
 from .theme import S2
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, SecondaryButton, Segmented,
@@ -371,6 +372,7 @@ class SocialLook(QWidget):
         self.fr_card.add(self.fr_pos_lbl)
         self.fr_card.add(self.fr_pos)
         pl.addWidget(self.fr_card)
+        pl.addWidget(SplitCard(state))
         self.safe = Toggle("Mostra le zone coperte dall'app")
         self.safe.toggled.connect(self._safe)
         sc = Card()

@@ -15,7 +15,7 @@ from .pipeline import audio_filter, plan_segments
 from .project import Project
 from .render import compositor
 from .render.model import Element, Scene, lower_third_elements, substitute
-from .spec import RenderSpec, audio_bitrate_bps, output_size, video_bitrate_bps
+from .spec import RenderSpec, audio_bitrate_bps, output_size, split_heights, video_bitrate_bps
 
 MAX_SAMPLE_FADE = 0.0
 
@@ -47,6 +47,7 @@ class _G:
         self.n = 0
         self.f: list[str] = []
         self.uses: dict[str, list[str]] = {}
+        self.second_audio = False
 
     def inp(self, *args: str) -> int:
         self.inputs += list(args)
@@ -148,6 +149,66 @@ def _clip_audio(k: int, seg) -> str:
             f"afade=t=in:st=0:d={f},afade=t=out:st={max(0.0, L - f):.4f}:d={f}")
 
 
+def _stack_second(g: "_G", sp, W: int, top_h: int, gap_h: int, bot_h: int, D: float, fps: float, notes: list[str]) -> None:
+    """Secondo video nel suo riquadro (riempie, con inquadratura regolabile) e i due riquadri uno sopra l'altro → [vc]."""
+    from .media_scan import media_info
+    h2 = bot_h if sp.main_on_top else top_h
+    rx = max(0.0, min(1.0, sp.second_x))
+    k = g.inp("-stream_loop", "-1", "-ss", f"{max(0.0, sp.second_start):.3f}", "-i", str(sp.path))
+    g.f.append(f"[{k}:v:0]scale={W}:{h2}:force_original_aspect_ratio=increase,crop={W}:{h2}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*0.5',"
+               f"fps={fps:.5f},setsar=1,format=yuv420p,trim=duration={D:.4f},setpts=PTS-STARTPTS[v2]")
+    parts = ["[vcm]", "[v2]"] if sp.main_on_top else ["[v2]", "[vcm]"]
+    if gap_h:
+        c = g.inp("-f", "lavfi", "-i", f"color=c=black:s={W}x{gap_h}:r={fps:.5f}:d={D + 1:.3f}")
+        parts.insert(1, f"[{c}:v:0]")
+    g.f.append("".join(parts) + f"vstack=inputs={len(parts)}[vc]")
+    g.second_audio = False
+    if sp.second_audio:
+        try:
+            has = media_info(sp.path).has_audio
+        except Exception:  # noqa: BLE001 - se non si riesce a leggere, il secondo video resta muto
+            has = False
+        if has:
+            g.f.append(f"[{k}:a:0]aresample=48000,aformat=sample_rates=48000:channel_layouts=stereo,volume={sp.second_db:.1f}dB,"
+                       f"atrim=end={D:.4f},asetpts=PTS-STARTPTS[a2]")
+            g.f.append("[acat][a2]amix=inputs=2:duration=first:normalize=0:dropout_transition=0[acat2]")
+            g.second_audio = True
+        else:
+            notes.append("Il secondo video non ha audio: si sente solo il tuo.")
+
+
+def _add_clip_overlays(g: "_G", cur: str, els: list[Element], W: int, H: int, D: float, notes: list[str]) -> str:
+    """Overlay animati (video o GIF, anche con sfondo trasparente): uno per elemento, per tutta la sua durata."""
+    for el in els:
+        if el.kind != "clip" or not el.visible:
+            continue
+        if not el.path or not Path(el.path).exists():
+            notes.append(f"Overlay non trovato: {Path(el.path).name or 'senza nome'}.")
+            continue
+        a = max(0.0, el.start)
+        b = D if el.end is None else min(el.end, D)
+        if b - a < 0.05:
+            continue
+        ext = Path(el.path).suffix.lower()
+        args = ["-c:v", "libvpx-vp9"] if ext == ".webm" else []                # il decoder predefinito perde la trasparenza
+        if el.loop:
+            args = ["-stream_loop", "-1", *args]
+        k = g.inp(*args, "-i", el.path)
+        lab, out = _lab("c"), _lab("o")
+        w = max(2, round(el.width * W / 2) * 2)
+        op = f",colorchannelmixer=aa={el.opacity:.3f}" if el.opacity < 0.999 else ""
+        fade = ""
+        if el.anim_in.kind != "none":
+            fade += f",fade=t=in:st={a:.3f}:d={max(0.05, el.anim_in.duration):.3f}:alpha=1"
+        if el.anim_out.kind != "none":
+            fade += f",fade=t=out:st={max(a, b - el.anim_out.duration):.3f}:d={max(0.05, el.anim_out.duration):.3f}:alpha=1"
+        g.f.append(f"[{k}:v:0]format=rgba,scale={w}:-2,fps={g.fps:.5f}{op},setpts=PTS-STARTPTS+{a:.4f}/TB{fade}[{lab}]")
+        g.f.append(f"[{cur}][{lab}]overlay=x={el.x * W:.2f}-w/2:y={el.y * H:.2f}-h/2:enable='between(t,{a:.4f},{b:.4f})':"
+                   f"eof_action={'repeat' if el.loop else 'pass'}:shortest=0:format=auto[{out}]")
+        cur = out
+    return cur
+
+
 def _fpath(p: Path) -> str:
     """Percorso dentro un filtro ffmpeg: barre dritte e due punti protetti (C\\:/...)."""
     return str(p).replace("\\", "/").replace(":", "\\:").replace("'", "\\'")
@@ -246,15 +307,24 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     segs = [s for a, b in ranges for s in plan_segments(clips, a, b)]
     if not segs:
         raise FFmpegError("Nessuna parte del video da esportare")
+    sp = spec.split
+    split = social and sp.enabled and bool(sp.path) and Path(sp.path).exists()
+    if social and sp.enabled and not split:
+        notes.append("Secondo video non trovato: il reel esce con un solo video.")
+    top_h, gap_h, bot_h = split_heights(sp, H) if split else (0, 0, 0)
+    Hm = (top_h if sp.main_on_top else bot_h) if split else H            # altezza del riquadro del tuo video
     for s in segs:
         k = g.inp("-ss", f"{s.ss:.6f}", "-t", f"{s.length:.6f}", "-i", str(s.clip.path))
-        g.f.append(f"[{k}:v:0]{_main_chain_for_clip(s.clip, spec, W, H, fps, str(k), social)}[v{k}]")
+        g.f.append(f"[{k}:v:0]{_main_chain_for_clip(s.clip, spec, W, Hm, fps, str(k), social)}[v{k}]")
         if social:
             g.f.append(f"{_clip_audio(k, s)}[a{k}]")
     n = len(segs)
     dips = ""
     if social:
-        g.f.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vc][acat]")
+        vcat = "vcm" if split else "vc"
+        g.f.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[{vcat}][acat]")
+        if split:
+            _stack_second(g, sp, W, top_h, gap_h, bot_h, D, fps, notes)
     elif n == 1:
         g.f.append("[v0]null[vc]")
     else:
@@ -263,7 +333,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         if dips:
             g.f.append(f"[vc]{dips}[vcd]")
     cur = "vcd" if dips else "vc"
-    if im.kenburns:
+    if im.kenburns and not split:
         g.f.append(f"[{cur}]{kenburns_filter(spec, W, H, t0)}[vk]")
         cur = "vk"
 
@@ -277,6 +347,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     layers = compositor.plan_layers(els, W, H, D, fps, workdir, "m")
     frames += sum(l.frames for l in layers)
     cur = add_layers(g, cur, layers)
+    cur = _add_clip_overlays(g, cur, els, W, H, D, notes)
 
     # --- 3b. sottotitoli (libass), sopra tutto il resto del video principale
     sub = spec.subtitles
@@ -299,7 +370,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
     # --- 5. audio principale
     voice = audio_fx.VoiceOptions(spec.audio.highpass, spec.audio.denoise, spec.audio.compressor)
     if social:
-        src = "[acat]"                                      # audio delle stesse clip, già tagliato insieme al video
+        src = "[acat2]" if split and g.second_audio else "[acat]"   # audio delle stesse clip, già tagliato insieme al video
         achain = audio_fx.voice_chain(voice)
         if spec.audio.loudnorm:
             achain.append("loudnorm=I=-14:TP=-1.5:LRA=11")   # livello tipico dei social, in una sola passata

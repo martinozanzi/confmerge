@@ -139,3 +139,33 @@ def _png():
     img.fill(0xFFFF0000)
     img.save(f)
     return f
+
+
+def test_split_card_and_canvas_preview(qapp, tmp_path):
+    import subprocess
+    from PySide6.QtGui import QImage
+    from confmerge.ui.canvas import Canvas
+    from confmerge.ui.split_card import SplitCard
+    red = tmp_path / "r.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=0xFF0000:size=320x180:rate=25:duration=1",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", str(red)], check=True)
+    from confmerge.project import Project
+    s = AppState(kind="social")
+    s.project = Project(clips=[], audio="", total_duration=5.0, kind="social")
+    s.spec.image.aspect = "9:16"
+    card = SplitCard(s)
+    assert not card.body.isVisibleTo(card)
+    s.spec.split.path = str(red)
+    card.on.setChecked(True)
+    assert s.spec.split.enabled and card.body.isVisibleTo(card) and "r.mp4" in card.name.text()
+    card.ratio.setValue(40)
+    assert s.spec.split.ratio == 0.4
+    cv = Canvas(s)
+    cv.resize(400, 700)
+    cv.set_frame(QImage(640, 360, QImage.Format_ARGB32))
+    img = cv.compose()
+    W, H = cv.frame_size()
+    assert img.pixelColor(W // 2, int(H * 0.9)).red() > 200 and img.pixelColor(W // 2, int(H * 0.9)).green() < 60     # secondo video sotto
+    s.spec.split.main_on_top = False
+    img = cv.compose()
+    assert img.pixelColor(W // 2, int(H * 0.1)).red() > 200                                                        # ora sopra
