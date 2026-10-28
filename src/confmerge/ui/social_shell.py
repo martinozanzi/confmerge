@@ -347,6 +347,26 @@ class SocialLook(QWidget):
         self.preview = PreviewButton(state, lambda: self.player.position(), lambda: self._preview_spec(), "Guarda 10 s")
         pr.addWidget(self.preview)
         ll.addLayout(pr)
+        # allinea ai lati dell'area sicura (o del video), come i pulsanti di CapCut; «Ripristina» riporta posizione e grandezza
+        ar = QHBoxLayout()
+        ar.setSpacing(4)
+        self.align_btns: list[SecondaryButton] = []
+        for text, tip, h, v in (("⇤", "Allinea a sinistra", "l", ""), ("⇔", "Allinea al centro (orizzontale)", "c", ""),
+                                ("⇥", "Allinea a destra", "r", ""), ("⤒", "Allinea in alto", "", "t"),
+                                ("⇕", "Allinea al centro (verticale)", "", "m"), ("⤓", "Allinea in basso", "", "b")):
+            b = SecondaryButton(text, None, tip)
+            b.setAccessibleName(tip)
+            b.clicked.connect(lambda _=False, hh=h, vv=v: self._align(hh, vv))
+            b.setEnabled(False)
+            self.align_btns.append(b)
+            ar.addWidget(b)
+        self.reset_item = SecondaryButton("Ripristina", "rotate-ccw", "Riporta l'elemento scelto dov'era e grande com'era")
+        self.reset_item.clicked.connect(self._reset_item)
+        self.reset_item.setEnabled(False)
+        ar.addSpacing(8)
+        ar.addWidget(self.reset_item)
+        ar.addStretch(1)
+        ll.addLayout(ar)
         split.addWidget(left)
         # --- pannelli: uno per passo, a due colonne, senza scorrimento (pensati per un portatile 1366×768)
         self.panels = QStackedWidget()
@@ -445,14 +465,33 @@ class SocialLook(QWidget):
     def _item_selected(self, kind: str, idx: int):
         from . import placement
         on = bool(kind)
-        self.c_h.setEnabled(on)
-        self.c_v.setEnabled(on)
+        movable = on and kind != "split"                     # il secondo video non si allinea: si regola trascinandolo
+        self.c_h.setEnabled(movable)
+        self.c_v.setEnabled(movable)
+        for b in self.align_btns:
+            b.setEnabled(movable)
+        self.reset_item.setEnabled(on)
         self.sel_lbl.setText(placement.label_of(self.state, kind, idx) if on
-                             else "Trascina testi, logo e sottotitoli sull'anteprima (Alt = senza aggancio).")
+                             else "Trascina testi, logo e sottotitoli sull'anteprima; le maniglie li ridimensionano "
+                                  "(Alt = senza aggancio, Maiusc = libero).")
 
     def _items_changed(self):
         self.state.touch()
         self.state.profile_changed.emit()                   # le schede mostrano «Libero» e la nuova posizione
+
+    def _align(self, h: str, v: str):
+        from . import placement
+        cv = self.player.canvas
+        if not cv.sel_item:
+            return
+        W, H = cv.frame_size()
+        safe = cv.safe_common if self.c_ref.value() == "safe" else None
+        placement.align(self.state, *cv.sel_item, W, H, h, v, safe)
+        cv.update()
+        self._items_changed()
+
+    def _reset_item(self):
+        self.player.canvas.reset_selected()
 
     def _center(self, h: bool, v: bool):
         from . import placement
