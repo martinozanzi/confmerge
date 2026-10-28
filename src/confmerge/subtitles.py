@@ -4,6 +4,7 @@ Nell'export si usa il filtro `ass` di ffmpeg (libass): regge migliaia di righe s
 righe sono salvate sulla linea del tempo del progetto: se cambi inizio/fine del video le righe restano valide."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from PySide6.QtGui import QFont, QFontMetricsF
@@ -26,13 +27,17 @@ PRESETS: dict[str, dict] = {
                               outline_color="#000000", shadow=True, box=False, uppercase=True, position="middle"),
     "Reel a blocchi": dict(font="Anton", bold=False, size=0.062, color="#FFFFFF", outline=0.007, outline_color="#000000",
                            shadow=True, box=False, uppercase=True, position="middle", chunk_words=3, anim="pop"),
+    "Parola evidenziata": dict(font="Poppins", bold=True, size=0.04, color="#FFFFFF", outline=0.006, outline_color="#000000",
+                               shadow=True, box=False, uppercase=True, position="middle", chunk_words=3, anim="highlight",
+                               hl_color="#FFE600", hl_scale=1.2),
     "Leggero": dict(font="Inter", bold=False, size=0.04, color="#FFFFFF", outline=0.0, shadow=True, box=False,
                     uppercase=False),
 }
 
 
-PRESET_DEFAULTS = dict(position="bottom", chunk_words=0, anim="none", x=0.5, y=-1.0, box=False)
-ANIMS = {"none": "Nessuna", "fade": "Dissolvenza", "pop": "Pop (compare ingrandendosi)"}
+PRESET_DEFAULTS = dict(position="bottom", chunk_words=0, anim="none", x=0.5, y=-1.0, box=False, hl_color="#FFE600", hl_scale=1.2)
+ANIMS = {"none": "Nessuna", "fade": "Dissolvenza", "pop": "Pop (compare ingrandendosi)",
+         "highlight": "Parola evidenziata (si colora e ingrandisce)"}
 CHUNKS = {0: "Tutta la frase", 3: "3 parole per volta", 2: "2 parole per volta", 1: "Una parola per volta"}
 
 
@@ -48,8 +53,31 @@ def chunked_lines(st: SubtitleSettings) -> list[SubLine]:
     from .transcribe import Line, split_words
     out = []
     for ln in st.lines:
-        out += [SubLine(x.start, x.end, x.text) for x in split_words([Line(ln.start, ln.end, ln.text)], st.chunk_words)]
+        parts = split_words([Line(ln.start, ln.end, ln.text, list(ln.times) or None)], st.chunk_words)
+        out += [SubLine(x.start, x.end, x.text, list(x.times or [])) for x in parts]
     return out
+
+
+def word_times(ln: SubLine) -> list[float]:
+    """Inizio di ogni parola della riga: i tempi veri se ci sono, altrimenti in proporzione alla lunghezza delle parole."""
+    toks = ln.text.split()
+    if ln.times and len(ln.times) == len(toks):
+        return list(ln.times)
+    total = sum(len(t) + 1 for t in toks) or 1
+    out, pos = [], ln.start
+    for t in toks:
+        out.append(pos)
+        pos += (ln.end - ln.start) * (len(t) + 1) / total
+    return out
+
+
+def word_index(ln: SubLine, t: float) -> int:
+    """La parola che si sta dicendo al tempo t (stessa scala della riga)."""
+    idx = 0
+    for i, ts in enumerate(word_times(ln)):
+        if t >= ts - 1e-6:
+            idx = i
+    return idx
 
 
 def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = None) -> list[SubLine]:
@@ -61,9 +89,11 @@ def effective_lines(st: SubtitleSettings, t0: float | list, t1: float | None = N
     for ln in chunked_lines(st):
         if not ln.text.strip():
             continue
+        times = word_times(ln)
         for a, b in edl.remap_span(ranges, ln.start, ln.end):
             if b - a > 0.05:
-                out.append(SubLine(a, b, ln.text.strip()))
+                whole = abs((b - a) - (ln.end - ln.start)) < 0.02          # nessun taglio dentro: i tempi si spostano e basta
+                out.append(SubLine(a, b, ln.text.strip(), [round(x - ln.start + a, 3) for x in times] if whole else []))
     out.sort(key=lambda x: x.start)
     return out
 
@@ -192,7 +222,21 @@ def to_ass(st: SubtitleSettings, t0: float | list, t1: float | None, W: int, H: 
              "pop": "{\\fscx72\\fscy72\\t(0,130,\\fscx108\\fscy108)\\t(130,220,\\fscx100\\fscy100)\\fad(60,60)}"}.get(st.anim, "")
     for ln in effective_lines(st, t0, t1):
         clean = ln.text.replace("\\", "").replace("{", "(").replace("}", ")")
-        txt = free + wrap_text(st, clean, W, H).replace("\n", "\\N")       # a capo deciso qui: uguale all'anteprima
+        wrapped = wrap_text(st, clean, W, H)
+        if st.anim == "highlight":                                          # un evento per parola: quella detta si colora e cresce
+            times = word_times(ln)
+            hl = f"{{\\c{_ass_color(st.hl_color)}\\fscx{st.hl_scale * 100:.0f}\\fscy{st.hl_scale * 100:.0f}}}"
+            toks = list(re.finditer(r"\S+", wrapped))
+            for k in range(min(len(toks), len(times))):
+                a = times[k] if k else ln.start
+                b = times[k + 1] if k + 1 < len(times) else ln.end
+                if b - a < 0.02:
+                    continue
+                m = toks[k]
+                txt = wrapped[:m.start()] + hl + m.group() + "{\\r}" + wrapped[m.end():]
+                body.append(f"Dialogue: 0,{_ass_time(a)},{_ass_time(b)},Default,,0,0,0,,{free}" + txt.replace("\n", "\\N"))
+            continue
+        txt = free + wrapped.replace("\n", "\\N")       # a capo deciso qui: uguale all'anteprima
         body.append(f"Dialogue: 0,{_ass_time(ln.start)},{_ass_time(ln.end)},Default,,0,0,0,,{txt}")
     return head + "\n".join(body) + "\n"
 
@@ -211,6 +255,8 @@ def wrap_text(st: SubtitleSettings, text: str, W: int, H: int) -> str:
     """A capo come libass: dentro la larghezza meno i margini laterali."""
     fm = QFontMetricsF(_font(st, st.size * H))
     limit = W * (1 - 2 * SIDE_MARGIN)
+    if st.anim == "highlight":
+        limit /= max(1.0, st.hl_scale)                       # la parola evidenziata cresce: si lascia il posto
     out, cur = [], ""
     for word in (text.upper() if st.uppercase else text).split():
         trial = (cur + " " + word).strip()
@@ -234,7 +280,8 @@ def effective_margin(st: SubtitleSettings, safe: list | tuple | None = None) -> 
     return st.margin
 
 
-def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list | tuple | None = None) -> Element:
+def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list | tuple | None = None,
+                    hl_word: int = -1) -> Element:
     """L'elemento che disegna il sottotitolo: anteprima e trascinamento. L'animazione d'entrata parte a t = 0."""
     wrapped = wrap_text(st, text, W, H)
     n = wrapped.count("\n") + 1
@@ -250,7 +297,8 @@ def preview_element(st: SubtitleSettings, text: str, W: int, H: int, safe: list 
         x, y = st.x, st.y
     return Element(
         id="__subtitle", kind="text", text=wrapped, font=st.font, size=st.size, bold=st.bold, x=x, y=y,
-        align="center", fill=Fill(color=st.color), outline=Outline(st.outline, st.outline_color),
+        align="center", fill=Fill(color=st.color), outline=Outline(st.outline * 2, st.outline_color),
         shadow=Shadow(enabled=st.shadow and not st.box, color="#000000", blur=0.004, distance=0.004, opacity=0.7),
         box=Box(enabled=st.box, color=st.box_color, opacity=st.box_opacity, padding=0.012, radius=0.006),
-        anim_in=Anim(kind=st.anim if st.anim in ("fade", "pop") else "none", duration=0.2, easing="back"))
+        anim_in=Anim(kind=st.anim if st.anim in ("fade", "pop") else "none", duration=0.2, easing="back"),
+        hl_word=hl_word if st.anim == "highlight" else -1, hl_color=st.hl_color, hl_scale=st.hl_scale)

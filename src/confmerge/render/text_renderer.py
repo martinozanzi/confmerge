@@ -176,7 +176,7 @@ def _draw_text_content(p: QPainter, el: Element, W: int, H: int, st: AnimState, 
     mode = el.anim_in.kind if (st.unit_progress is not None and el.anim_in.kind in ("by_word", "by_letter")) else None
     if st.unit_progress is not None and mode is None:
         mode = el.anim_out.kind if el.anim_out.kind in ("by_word", "by_letter") else None
-    units = blk.units(mode or "line")
+    units = blk.units(mode or ("by_word" if el.hl_word >= 0 else "line"))
     total = max(1, len(units))
     text = el.text
     if st.chars < 1.0:  # macchina da scrivere: prefisso, layout del testo completo
@@ -202,7 +202,20 @@ def _draw_text_content(p: QPainter, el: Element, W: int, H: int, st: AnimState, 
         p.save()
         p.setOpacity(p.opacity() * a)
         p.setPen(pen)
-        p.setBrush(fill_brush(el.fill, blk.rect))
+        brush = fill_brush(el.fill, blk.rect)
+        if el.hl_word >= 0 and n == el.hl_word:                       # parola evidenziata: colore e grandezza diversi
+            brush = qcolor(el.hl_color)
+            cx = x + blk.fm.horizontalAdvance(s) / 2
+            cy = base - blk.fm.ascent() + blk.fm.height() / 2
+            p.translate(cx, cy)
+            p.scale(el.hl_scale, el.hl_scale)
+            p.translate(-cx, -cy)
+        if pen is not Qt.NoPen:                                       # prima il contorno, poi il riempimento sopra:
+            p.setPen(pen)                                             # il bordo spesso non «mangia» più le lettere
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(path)
+        p.setPen(Qt.NoPen)
+        p.setBrush(brush)
         p.drawPath(path)
         p.restore()
 

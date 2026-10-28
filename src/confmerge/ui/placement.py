@@ -29,7 +29,10 @@ def items(state, W: int, H: int) -> list[tuple[str, int, QRectF]]:
         out.append(("logo", int(be.id.replace("__logo", "")), element_bbox(be, W, H)))
     st = spec.subtitles
     if st.enabled:
-        text = subtitles.SAMPLE_TEXT if not st.lines else st.lines[0].text
+        lines = subtitles.chunked_lines(st)
+        text = subtitles.SAMPLE_TEXT if not lines else lines[0].text
+        if not lines and st.chunk_words:
+            text = " ".join(text.split()[:st.chunk_words])
         out.append(("sub", 0, element_bbox(subtitles.preview_element(st, text, W, H, safe), W, H)))
     return out
 

@@ -65,6 +65,7 @@ class SubLine:
     start: float = 0.0            # secondi sulla linea del tempo del progetto (non del video di uscita)
     end: float = 0.0
     text: str = ""
+    times: list[float] = field(default_factory=list)   # inizio di ogni parola (stessa scala di start); vuoto = in proporzione
 
 
 @dataclass
@@ -87,7 +88,9 @@ class SubtitleSettings:
     y: float = -1.0                # -1 = segue «position» e «margin»
     uppercase: bool = False
     chunk_words: int = 0           # 0 = una frase per volta; 2-3 = poche parole alla volta, come nei reel
-    anim: str = "none"             # none | fade | pop: come entra ogni sottotitolo
+    anim: str = "none"             # none | fade | pop | highlight (la parola detta si colora e si ingrandisce)
+    hl_color: str = "#FFE600"      # colore della parola evidenziata
+    hl_scale: float = 1.2          # quanto si ingrandisce (1,0 = per niente)
     source_lang: str = "it"        # lingua parlata nel video ("" = la riconosce da sola)
     lang: str = ""                 # lingua dei sottotitoli ("" = la stessa del video: altrimenti si traducono)
     max_chars: int = 38            # lunghezza massima di una riga quando si creano i sottotitoli

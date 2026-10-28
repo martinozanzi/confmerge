@@ -771,7 +771,8 @@ class SubtitleController(QObject):
         from ..spec import SubLine
         lines, t0, t1 = res
         sub = self.state.spec.subtitles
-        sub.lines = [SubLine(round(ln.start + t0, 2), round(ln.end + t0, 2), ln.text) for ln in lines]
+        sub.lines = [SubLine(round(ln.start + t0, 2), round(ln.end + t0, 2), ln.text,
+                             [round(x + t0, 2) for x in ln.times or []]) for ln in lines]
         sub.range_start, sub.range_end = t0, t1
         sub.enabled = bool(sub.lines)
         self.state.touch()

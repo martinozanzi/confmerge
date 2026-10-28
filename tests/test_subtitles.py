@@ -144,3 +144,46 @@ def test_chunked_lines_and_animation_tags():
     assert st.chunk_words == 3 and st.uppercase and st.anim == "pop"
     S.apply_preset(st, "Classico")
     assert st.chunk_words == 0 and st.anim == "none"
+
+
+def test_highlight_word_events_and_times():
+    from confmerge.transcribe import Word, build_lines, split_words
+    words = [Word("grande", 0.0, 0.4), Word("manifestazione", 0.5, 1.2), Word("di", 1.3, 1.4), Word("piazza", 1.6, 2.0),
+             Word("milano", 2.1, 2.6)]
+    lines = build_lines(words, max_chars=60)
+    assert lines[0].times == [0.0, 0.5, 1.3, 1.6, 2.1]
+    parts = split_words(lines, 3)
+    assert [p.text for p in parts] == ["grande manifestazione di", "piazza milano"] and parts[1].start == 1.6
+    st = SubtitleSettings(enabled=True, lines=[SubLine(l.start, l.end, l.text, l.times) for l in lines])
+    S.apply_preset(st, "Parola evidenziata")
+    ass = S.to_ass(st, 0.0, 10.0, 720, 1280)
+    ev = [l for l in ass.splitlines() if l.startswith("Dialogue")]
+    assert len(ev) == 5                                                    # un evento per parola
+    assert "Dialogue: 0,0:00:00.50,0:00:01.30" in ev[1] and "\\fscx120" in ev[1] and "MANIFESTAZIONE{\\r}" in ev[1]
+    ln = S.chunked_lines(st)[0]
+    assert S.word_index(ln, 0.6) == 1 and S.word_index(ln, 1.35) == 2
+    # senza tempi veri: in proporzione, ma sempre una parola alla volta
+    assert S.word_times(SubLine(0, 3, "uno due tre")) == pytest.approx([0.0, 1.0, 2.0])
+
+
+def test_highlight_preview_draws_word_differently(qapp=None):
+    from PySide6.QtGui import QImage
+    from confmerge.render import compositor
+    st = SubtitleSettings(enabled=True)
+    S.apply_preset(st, "Parola evidenziata")
+    base = QImage(720, 1280, QImage.Format_ARGB32_Premultiplied)
+    base.fill(0xFF202020)
+    a = compositor.render_frame([S.preview_element(st, "uno due tre", 720, 1280, None, -1)], 720, 1280, 1.0, 1e9, base)
+    b = compositor.render_frame([S.preview_element(st, "uno due tre", 720, 1280, None, 1)], 720, 1280, 1.0, 1e9, base)
+    assert a != b
+    reds = sum(1 for x in range(0, 720) for y in range(560, 720)
+               if (lambda c: c.red() > 200 and c.green() > 200 and c.blue() < 80)(b.pixelColor(x, y)))
+    assert reds > 100                                                       # c'è giallo (la parola evidenziata)
+
+
+def test_split_words_lone_tail_merges_even_with_two_groups():
+    from confmerge.transcribe import Line, split_words
+    out = split_words([Line(0, 4, "uno due tre quattro")], 3)
+    assert [o.text for o in out] == ["uno due tre quattro"] and (out[0].start, out[0].end) == (0, 4)
+    out = split_words([Line(0, 7, "a b c d e f g")], 3)
+    assert [o.text for o in out] == ["a b c", "d e f g"]

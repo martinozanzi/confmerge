@@ -78,6 +78,9 @@ class Element:
     fit_width: float = 0.0         # 0 = nessun limite; altrimenti il testo si rimpicciolisce per stare in questa frazione della larghezza
     line_spacing: float = 1.0
     letter_spacing: float = 0.0   # frazione dell'altezza
+    hl_word: int = -1             # sottotitoli: indice della parola evidenziata (-1 = nessuna)
+    hl_color: str = "#FFE600"
+    hl_scale: float = 1.0
     fill: Fill = field(default_factory=Fill)
     outline: Outline = field(default_factory=Outline)
     shadow: Shadow = field(default_factory=Shadow)
