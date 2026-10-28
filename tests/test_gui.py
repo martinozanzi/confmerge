@@ -161,3 +161,42 @@ def test_advanced_flow_layers_undo_and_export(app_window, media, tmp_path):
     st.project.save(tmp_path / "p.confmerge")
     from confmerge.project import Project
     assert Project.load(tmp_path / "p.confmerge").spec["graphics"]["elements"][0]["text"] == "Evento"
+
+
+def test_one_selection_recognised_and_shared_between_tools(app_window, media):
+    """Una cartella con video + audio si apre come conferenza; passando a Social si riusano gli stessi file senza riselezionarli."""
+    app, st, w = app_window
+    w.open_sources([media])
+    assert w.app == "merge" and w.selection == [media]
+    wait(app, lambda: st.project is not None)
+    assert len(st.project.clips) == 2 and st.project.audio
+    w.switch_tool("social")
+    assert w.app == "social"
+    wait(app, lambda: w.social_state.project is not None)
+    assert len(w.social_state.project.clips) == 2 and w.social_state.project.kind == "social"
+    assert w.social.step == 1                                              # già al passo «Taglia»
+    # soli video: si apre come social anche partendo da Conferenze
+    w.set_app("merge")
+    w.social_state.project = None
+    w.open_sources([media / "v0.mp4"])
+    assert w.app == "social"
+    wait(app, lambda: w.social_state.project is not None and len(w.social_state.project.clips) == 1)
+
+
+def test_steps_are_clickable_and_locked_until_ready(app_window, media):
+    app, st, w = app_window
+    s = w.simple
+    s.steps.clicked.emit(1)                                                # niente progetto: il clic non porta avanti
+    assert s.step == 0
+    assert s.steps.reach == 0
+    w.open_sources([media])
+    wait(app, lambda: st.project is not None and s.step == 1)
+    assert s.steps.reach == 1                                              # Esporta ancora bloccato: manca la conferma
+    s.steps.clicked.emit(2)
+    assert s.step == 1
+    st.review.apply_suggestion()
+    assert s.steps.reach == 2
+    s.steps.clicked.emit(2)
+    assert s.step == 2
+    s.steps.clicked.emit(0)                                                # tornare indietro è sempre possibile
+    assert s.step == 0

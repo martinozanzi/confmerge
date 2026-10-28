@@ -48,6 +48,8 @@ def video_files(items) -> list[Path]:
 
 # ------------------------------------------------------------------------------------------------------------ 1. video
 class SocialStart(QWidget):
+    picked = Signal(object)          # file o cartelle scelti: li smista la finestra (riconosce conferenza o social)
+
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.state = state
@@ -58,8 +60,9 @@ class SocialStart(QWidget):
         pick = QWidget()
         pl = QVBoxLayout(pick)
         pl.setAlignment(Qt.AlignCenter)
-        self.drop = DropZone("Trascina qui i tuoi video",
-                             "Uno o più file (mp4, mov…). Se sono più di uno li metto uno dopo l'altro.", "Scegli i video…")
+        self.drop = DropZone("Trascina qui i tuoi video o la cartella",
+                             "Riconosco da solo se è un video per i social o una conferenza (video + registrazione audio).",
+                             "Scegli i video…")
         self.drop.setMinimumSize(620, 300)
         self.drop.setMaximumWidth(820)
         self.drop.dropped.connect(self._dropped)
@@ -98,14 +101,10 @@ class SocialStart(QWidget):
     def browse(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Scegli i video", "", "Video (*.mp4 *.mov *.m4v)")
         if files:
-            self.start(files)
+            self.picked.emit([Path(f) for f in files])
 
     def _dropped(self, items):
-        files = video_files(items)
-        if not files:
-            self.problem.setText("Non ho trovato video: trascina file mp4 o mov.")
-            return
-        self.start(files)
+        self.picked.emit([Path(p) for p in items])
 
     def start(self, files):
         from .. import social

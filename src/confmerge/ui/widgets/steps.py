@@ -2,25 +2,52 @@ from __future__ import annotations
 
 from PySide6.QtCore import QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
-from PySide6.QtWidgets import QButtonGroup, QFrame, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from ..theme import ICON, S1, S2, S3, theme
 
 
 class StepIndicator(QWidget):
-    """Tre/cinque passi con numero, collegamenti e stato (completato / attivo / bloccato)."""
+    """Passi con numero, collegamenti e stato (completato / attivo / bloccato). Ogni passo si clicca per andarci."""
+    clicked = Signal(int)
 
     def __init__(self, labels: list[str], parent=None):
         super().__init__(parent)
         self.labels = labels
         self.current = 0
         self.done_upto = -1
+        self.reach = 10 ** 6                      # ultimo passo raggiungibile: i successivi sono bloccati (grigi, senza clic)
+        self._hover = -1
+        self.setMouseTracking(True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setFixedHeight(48)
 
     def set_state(self, current: int, done_upto: int | None = None) -> None:
         self.current = current
         self.done_upto = current - 1 if done_upto is None else done_upto
+        self.update()
+
+    def set_reach(self, last: int) -> None:
+        self.reach = last
+        self.update()
+
+    def _index_at(self, x: float) -> int:
+        return min(len(self.labels) - 1, max(0, int(x / max(1.0, self.width() / len(self.labels)))))
+
+    def mousePressEvent(self, e):
+        i = self._index_at(e.position().x())
+        if i <= self.reach and i != self.current:
+            self.clicked.emit(i)
+
+    def mouseMoveEvent(self, e):
+        i = self._index_at(e.position().x())
+        ok = i <= self.reach and i != self.current
+        self.setCursor(Qt.PointingHandCursor if ok else Qt.ArrowCursor)
+        self._hover = i if ok else -1
+        self.update()
+
+    def leaveEvent(self, e):
+        self._hover = -1
         self.update()
 
     def paintEvent(self, _):
@@ -44,8 +71,34 @@ class StepIndicator(QWidget):
                 theme.icon("check", t.on_accent, 14).paint(p, int(cx - 7), 7, 14, 14)
             else:
                 p.drawText(QRectF(cx - 12, 2, 24, 24), Qt.AlignCenter, str(i + 1))
-            p.setPen(QColor(t.text if active else t.text2))
+            locked = i > self.reach
+            p.setPen(QColor(t.text if (active or i == self._hover) else t.text2 if not locked else t.border))
+            f = p.font()
+            f.setUnderline(i == self._hover)
+            p.setFont(f)
             p.drawText(QRectF(seg * i, 30, seg, 18), Qt.AlignHCenter | Qt.AlignTop, lab)
+            f.setUnderline(False)
+            p.setFont(f)
+
+
+class FlowBar(QWidget):
+    """Barra in alto: i passi (cliccabili) e, a destra, Indietro / Avanti. Così i pulsanti non stanno mai in fondo alla pagina."""
+
+    def __init__(self, labels: list[str], parent=None):
+        super().__init__(parent)
+        from .buttons import PrimaryButton, SecondaryButton
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(S2)
+        self.steps = StepIndicator(labels)
+        row.addWidget(self.steps, 1)
+        self.extra = QHBoxLayout()                 # spazio per un eventuale link («Più opzioni»)
+        row.addLayout(self.extra)
+        self.back = SecondaryButton("Indietro", "chevron-left")
+        self.next = PrimaryButton("Avanti", "chevron-right")
+        row.addWidget(self.back)
+        row.addWidget(self.next)
+        self.setFixedHeight(52)
 
 
 class NavButton(QPushButton):

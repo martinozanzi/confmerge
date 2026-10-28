@@ -26,7 +26,7 @@ from .music_card import MusicCard
 from .subtitles_tab import SimpleSubtitlesCard
 from .template_gallery import VariablesForm
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, ProgressRing, SecondaryButton,
-                      StepIndicator, Toggle, label)
+                      FlowBar, StepIndicator, Toggle, label)
 from .widgets.anim import fade_in, stagger_cards
 
 MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre",
@@ -49,6 +49,7 @@ def used_variables(spec: RenderSpec) -> list[str]:
 # ------------------------------------------------------------------------------------------------------------ 1. cartella
 class SimpleStart(QWidget):
     started = Signal()
+    picked = Signal(object)          # file o cartelle scelti: li smista la finestra (riconosce conferenza o social)
 
     def __init__(self, state, parent=None):
         super().__init__(parent)
@@ -61,8 +62,9 @@ class SimpleStart(QWidget):
         pick = QWidget()
         pl = QVBoxLayout(pick)
         pl.setAlignment(Qt.AlignCenter)
-        self.drop = DropZone("Trascina qui la cartella della conferenza",
-                             "Dentro devono esserci i video della telecamera e la registrazione audio.", "Sfoglia…")
+        self.drop = DropZone("Trascina qui i tuoi video o la cartella",
+                             "Riconosco da solo se è una conferenza (video + registrazione audio) o un video per i social.",
+                             "Sfoglia…")
         self.drop.setMinimumHeight(300)
         self.drop.setMinimumWidth(620)
         self.drop.setMaximumWidth(820)
@@ -124,39 +126,41 @@ class SimpleStart(QWidget):
             self.recent_lay.addWidget(label("Ultime cartelle usate", "caption"), 0, Qt.AlignHCenter)
             for r in recents:
                 b = LinkButton(Path(r).name or r, r)
-                b.clicked.connect(lambda _=False, rr=r: self.use_folder(Path(rr)))
+                b.clicked.connect(lambda _=False, rr=r: self.picked.emit([Path(rr)]))
                 self.recent_lay.addWidget(b, 0, Qt.AlignHCenter)
 
     def browse(self):
-        d = QFileDialog.getExistingDirectory(self, "Cartella della conferenza", self.state.settings.data.get("last_folder", ""))
+        d = QFileDialog.getExistingDirectory(self, "Cartella con i video", self.state.settings.data.get("last_folder", ""))
         if d:
-            self.use_folder(Path(d))
+            self.picked.emit([Path(d)])
 
     def _dropped(self, items):
-        folder = next((p for p in items if p.is_dir()), None)
-        if folder:
-            self.use_folder(folder)
-        elif items:
-            self.use_folder(items[0].parent)
+        self.picked.emit([Path(p) for p in items])
 
     def use_folder(self, folder: Path):
+        self.use_paths([folder])
+
+    def use_paths(self, items: list[Path]):
+        """Carica i file o la cartella scelti (arrivano già riconosciuti come conferenza dalla finestra)."""
         m = self.state.sources
         self.problem.setText("")
         self.audio_btn.setVisible(False)
+        folder = next((Path(p) for p in items if Path(p).is_dir()), None)
         try:
             m.clear()
-            m.load_folder(folder)
+            folder = m.accept_paths([Path(p) for p in items]) or folder
         except Exception as e:  # noqa: BLE001
-            self.problem.setText(f"Non riesco a leggere questa cartella: {e}")
+            self.problem.setText(f"Non riesco a leggere questi file: {e}")
             return
-        s = self.state.settings
-        s.data["last_folder"] = str(folder)
-        rec = [r for r in s.data.get("recent_folders", []) if r != str(folder)]
-        s.data["recent_folders"] = [str(folder)] + rec[:4]
-        s.save()
+        if folder:
+            s = self.state.settings
+            s.data["last_folder"] = str(folder)
+            rec = [r for r in s.data.get("recent_folders", []) if r != str(folder)]
+            s.data["recent_folders"] = [str(folder)] + rec[:4]
+            s.save()
         self.render_recent()
         if not m.videos:
-            self.problem.setText("In questa cartella non ho trovato video (file .mp4 o .mov). Prova con un'altra cartella.")
+            self.problem.setText("Non ho trovato video (file .mp4 o .mov). Prova con un'altra cartella o altri file.")
             return
         if not m.audio:
             self.problem.setText("Ho trovato i video ma non la registrazione audio (mp3, wav, m4a…). Scegli il file qui sotto.")
@@ -703,16 +707,15 @@ class SimpleShell(QWidget):
         self.state = state
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 12, 24, 12)
-        top = QHBoxLayout()
-        self.steps = StepIndicator(STEPS)
-        self.steps.setMaximumWidth(620)
-        top.addStretch(1)
-        top.addWidget(self.steps, 3)
-        top.addStretch(1)
+        self.flow = FlowBar(STEPS)                         # passi cliccabili + Indietro/Avanti in alto
+        self.steps, self.back, self.next = self.flow.steps, self.flow.back, self.flow.next
         more = LinkButton("Più opzioni", "Passa alla modalità Avanzata con lo stesso progetto")
         more.clicked.connect(self.moreOptions)
-        top.addWidget(more)
-        lay.addLayout(top)
+        self.flow.extra.addWidget(more)
+        self.steps.clicked.connect(self.goto)
+        lay.addWidget(self.flow)
+        self.hint = label("", "caption", True)
+        lay.addWidget(self.hint)
         self.stack = QStackedWidget()
         self.start = SimpleStart(state)
         self.check = SimpleCheck(state)
@@ -720,16 +723,8 @@ class SimpleShell(QWidget):
         for w in (self.start, self.check, self.export):
             self.stack.addWidget(w)
         lay.addWidget(self.stack, 1)
-        nav = QHBoxLayout()
-        self.back = SecondaryButton("Indietro", "chevron-left")
-        self.next = PrimaryButton("Avanti", "chevron-right")
-        self.hint = label("", "caption", True)
         self.back.clicked.connect(self.go_back)
         self.next.clicked.connect(self.go_next)
-        nav.addWidget(self.back)
-        nav.addWidget(self.hint, 1)
-        nav.addWidget(self.next)
-        lay.addLayout(nav)
         state.analysis.finished.connect(lambda: self.show_step(1))
         state.review.trimChanged.connect(self._gate)
         state.project_changed.connect(self._gate)
@@ -746,6 +741,7 @@ class SimpleShell(QWidget):
         self.steps.set_state(i)
         self.back.setVisible(i in (1, 2))
         self.next.setVisible(i in (1, 2))
+        self.hint.setVisible(i == 1)
         self.next.setText("Esporta il video" if i == 2 else "Avanti")
         self.next.set_icon("download" if i == 2 else "chevron-right")
         self.next.setMinimumHeight(48 if i == 2 else 0)
@@ -756,7 +752,26 @@ class SimpleShell(QWidget):
         if i == 0:
             self.start.render_recent()
 
+    def goto(self, i: int) -> None:
+        """Clic su un passo: si può tornare indietro sempre, andare avanti solo se quello che serve è pronto."""
+        pr = self.state.project
+        if i == self.step:
+            return
+        if i > 0 and not pr:
+            return
+        if i == 2 and not (pr and pr.trim_confirmed):
+            self.show_step(1)
+            return
+        if self.step == 2 and i < 2:
+            self.export.reset()
+        self.show_step(i)
+
+    def _reach(self) -> int:
+        pr = self.state.project
+        return 2 if (pr and pr.trim_confirmed) else 1 if pr else 0
+
     def _gate(self):
+        self.steps.set_reach(self._reach())
         pr = self.state.project
         ok = bool(pr and pr.trim_confirmed)
         if self.step == 2:
