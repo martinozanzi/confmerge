@@ -23,7 +23,8 @@ class SubtitleCard(Card):
             self._cols[0].setSpacing(6)
             self._cols[1].setSpacing(6)
         c = 0
-        self.add(label("Sottotitoli", "h2", True))
+        if not wide:                                         # nelle pagine larghe il titolo è già quello del pannello
+            self.add(label("Sottotitoli", "h2", True))
         if wide:
             hh = QHBoxLayout()
             hh.setSpacing(18)
@@ -35,7 +36,6 @@ class SubtitleCard(Card):
         self.on = Toggle("Mostra i sottotitoli nel video")
         self.on.toggled.connect(self._toggled)
         self._put(self.on, c)
-        self._put(label("Finché non li crei, nell'anteprima vedi una frase di esempio con lo stile che scegli.", "caption", True), c)
         # lingue: del video e dei sottotitoli (se diversa, si traduce)
         from ..transcribe import LANGS
         self._put(label("Lingua parlata nel video", ""), c)
@@ -126,9 +126,13 @@ class SubtitleCard(Card):
         self.keybtn = SecondaryButton("Apri le Impostazioni", "settings")
         self.keybtn.clicked.connect(self._open)
         for b in (self.make, self.cancel, self.keybtn):
-            row.addWidget(b)
-        row.addStretch(1)
-        self._put_layout(row, c)
+            if wide:
+                self._put(b, c)                                  # uno sotto l'altro: la colonna è stretta
+            else:
+                row.addWidget(b)
+        if not wide:
+            row.addStretch(1)
+            self._put_layout(row, c)
         self.bar = ProgressBarThin()
         self.bar.setVisible(False)
         self._put(self.bar, c)
@@ -162,7 +166,7 @@ class SubtitleCard(Card):
         why = self.ctl.blocker()
         have = bool(s.lines)
         self.status.setText(f"{len(s.lines)} righe pronte." if have else
-                            f"Costo stimato: {self.ctl.cost_text()}. L'audio va a Groq solo quando premi «Crea».")
+                            f"Costo: {self.ctl.cost_text()}. L'audio parte solo con «Crea».")
         for w, v in ((self.on, s.enabled), ):
             w.blockSignals(True)
             w.setChecked(v)

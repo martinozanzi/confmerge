@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDoubleSpinBox, QFileDialog, QHBoxLayout, QSlider, QVBoxLayout
+from PySide6.QtWidgets import QBoxLayout, QDoubleSpinBox, QFileDialog, QHBoxLayout, QSlider, QVBoxLayout
 
 from ..media_scan import VIDEO_EXT
 from .widgets import Card, SecondaryButton, Segmented, Toggle, label
@@ -21,7 +21,8 @@ class SplitCard(Card):
         self.add(self.on)
         self.body = Card(flat=True, padding=0)
         self.add(self.body)
-        cols = QHBoxLayout()                                      # due colonne: la pagina non deve scorrere
+        cols = QBoxLayout(QBoxLayout.LeftToRight)                 # due colonne (una sola se lo spazio è poco)
+        self._cols = cols
         cols.setSpacing(18)
         left, right = QVBoxLayout(), QVBoxLayout()
         cols.addLayout(left, 1)
@@ -75,6 +76,13 @@ class SplitCard(Card):
         right.addStretch(1)
         state.profile_changed.connect(self.sync)
         self.sync()
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        want = QBoxLayout.TopToBottom if self.width() < 600 else QBoxLayout.LeftToRight
+        if self._cols.direction() != want:
+            self._cols.setDirection(want)
+            self.updateGeometry()
 
     def sp(self):
         return self.state.spec.split

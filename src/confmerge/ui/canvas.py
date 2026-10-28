@@ -16,6 +16,7 @@ from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
 from ..spec import RenderSpec, output_size, split_heights
+from ..templates import preview_variables
 from ..view import source_to_frame
 from .theme import theme
 
@@ -87,7 +88,7 @@ class Canvas(QWidget):
         if self.elements_override is not None:
             return self.elements_override
         gr = self.state.spec.graphics
-        vs = self.state.spec.variables
+        vs = preview_variables(self.state.spec.variables)          # esempi dove non hai ancora scritto
         W, H = self.frame_size()
         els = anchors.resolve(substitute([e for e in gr.elements if "main" in e.targets], vs), W, H, self.state.spec.brand.safe)
         els += brand_elements(self.state.spec, W, H)
@@ -267,7 +268,7 @@ class Canvas(QWidget):
     def _scene_elements(self) -> list[Element]:
         if not self.scene:
             return []
-        vs = self.state.spec.variables
+        vs = preview_variables(self.state.spec.variables)
         extra = [e for e in self.state.spec.graphics.elements if self.scene_target in e.targets]
         return substitute(list(self.scene.elements), vs) + substitute(extra, vs)
 

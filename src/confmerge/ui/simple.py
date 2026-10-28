@@ -23,6 +23,7 @@ from .thumbnail_dialog import ThumbnailDialog
 from .waveform import WaveformWidget
 from .brand_card import BrandCard
 from .music_card import MusicCard
+from .preview_button import PreviewButton
 from .subtitles_tab import SimpleSubtitlesCard
 from .template_gallery import VariablesForm
 from .widgets import (Card, DropZone, GhostButton, LinkButton, PrimaryButton, ProgressBarThin, ProgressRing, SecondaryButton,
@@ -229,7 +230,11 @@ class SimpleCheck(QWidget):
         self.wave = WaveformWidget()
         self.wave.setMinimumHeight(100)
         ll.addWidget(self.wave)
-        ll.addWidget(label("Le barre verde e rossa sono l'inizio e la fine. Puoi trascinarle.", "caption", True))
+        hr = QHBoxLayout()
+        hr.addWidget(label("Barre verde e rossa: inizio e fine (trascinabili).", "caption", True), 1)
+        self.preview = PreviewButton(state, lambda: self.player.position())
+        hr.addWidget(self.preview)
+        ll.addLayout(hr)
         split.addWidget(left)
         # --- pannelli: uno per passo, senza scorrimento (portatile 1366×768)
         self.panels = QStackedWidget()
@@ -271,7 +276,10 @@ class SimpleCheck(QWidget):
         for c in cards:
             lay.addWidget(c)
         lay.addStretch(1)
-        return w
+        from .graphics_page import scrolled
+        sa = scrolled(w)                                      # scorre solo se il testo è molto grande: normalmente sta tutto
+        sa.setMinimumWidth(max(440, w.minimumSizeHint().width() + 40))
+        return sa
 
     def set_panel(self, i: int) -> None:
         self.panels.setCurrentIndex(max(0, min(self.panels.count() - 1, i)))
@@ -397,6 +405,9 @@ class SimpleCheck(QWidget):
         used = used_variables(self.state.spec)
         if not used:
             self.fields_lay.addWidget(label("Questo profilo non ha testi da compilare.", "caption", True))
+        else:
+            self.fields_lay.addWidget(label("Finché un campo è vuoto, nell'anteprima vedi un testo d'esempio: scrivi il tuo e "
+                                            "lo vedi subito.", "caption", True))
         for k in used:
             self.fields_lay.addWidget(label(VARIABLES[k]))
             e = QLineEdit(self.state.spec.variables.get(k, ""))
@@ -552,6 +563,8 @@ class SimpleExport(QWidget):
         est.add(self.est_small)
         self.est_warn = label("", "warn", True)
         est.add(self.est_warn)
+        self.preview = PreviewButton(self.state, lambda: self.check.player.position(), text="Guarda 10 secondi prima di esportare")
+        est.add(self.preview)
         lay.addWidget(est)
         lay.addStretch(1)
         return w

@@ -44,9 +44,12 @@ def make_media(d: pathlib.Path) -> None:
     wavfile.write(str(d / "rec.wav"), SR, (world[int(1.5 * SR):] * 32767).astype("<i2"))
 
 
+VERTICAL = True                                  # si spegne con finestra minima o testo ingrandito (lì scorrere è ammesso)
+
+
 def find_problems(root: QWidget, tag: str) -> list[dict]:
     out = []
-    vertical = tag[:1] in ("s", "o", "h")         # Semplice, Social, scelta iniziale; l'Avanzata ha molte opzioni e può scorrere
+    vertical = VERTICAL and tag[:1] in ("s", "o", "h")     # Semplice, Social: su 1280×700 non scorrono; l'Avanzata può
     skip_parent = (QSplitter, QStackedWidget, QTabBar, QAbstractScrollArea, QScrollBar)
     for w in root.findChildren(QWidget):
         if not w.isVisible() or w.property("overlay"):
@@ -108,8 +111,10 @@ def main():
     outdir = pathlib.Path(args[0])
     outdir.mkdir(parents=True, exist_ok=True)
     use_min = "--min" in args
+    global VERTICAL
     theme_name = args[args.index("--theme") + 1] if "--theme" in args else "dark"
     fscale = float(args[args.index("--font-scale") + 1]) if "--font-scale" in args else 1.0
+    VERTICAL = not use_min and fscale <= 1.0
     app = QApplication([])
     from confmerge.settings import Settings
     from confmerge.ui.main_window import MainWindow
@@ -131,7 +136,7 @@ def main():
     shots: list[str] = []
 
     def snap(name):
-        pump(app)
+        pump(app, 25)                                   # i testi che arrivano da calcoli in corso (stime) fanno in tempo a sistemarsi
         w.grab().save(str(outdir / f"{name}.png"))
         problems.extend(find_problems(w, name))
         shots.append(name)

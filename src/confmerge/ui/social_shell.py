@@ -16,6 +16,7 @@ from .brand_card import BrandCard
 from .graphics_page import scrolled
 from .music_card import MusicCard
 from .player import PlayerWidget
+from .preview_button import PreviewButton
 from .social_style import OverlaysCard, StyleTemplateCard
 from .split_card import SplitCard
 from .subtitles_tab import SimpleSubtitlesCard
@@ -152,8 +153,9 @@ class SocialCut(QWidget):
         ll.addLayout(row)
         split.addWidget(left)
         panel = self._panel()
-        panel.setMinimumWidth(max(380, panel.minimumSizeHint().width()))
-        split.addWidget(panel)
+        sa = scrolled(panel)
+        sa.setMinimumWidth(max(380, panel.minimumSizeHint().width() + 40))
+        split.addWidget(sa)
         split.setStretchFactor(0, 5)
         split.setStretchFactor(1, 3)
         split.setSizes([700, 420])
@@ -342,6 +344,8 @@ class SocialLook(QWidget):
             b.setEnabled(False)
             pr.addWidget(b)
         pr.addStretch(1)
+        self.preview = PreviewButton(state, lambda: self.player.position(), lambda: self._preview_spec(), "Guarda 10 s")
+        pr.addWidget(self.preview)
         ll.addLayout(pr)
         split.addWidget(left)
         # --- pannelli: uno per passo, a due colonne, senza scorrimento (pensati per un portatile 1366×768)
@@ -384,8 +388,7 @@ class SocialLook(QWidget):
         self.legend_lay = QVBoxLayout(self.legend_box)
         self.legend_lay.setContentsMargins(0, 0, 0, 0)
         sc.add(self.legend_box)
-        sc.add(label("Ogni piattaforma ha la sua zona colorata (la loro interfaccia copre quelle parti). La linea verde è "
-                     "l'area sicura per tutte.", "caption", True))
+        sc.add(label("Ogni zona colorata è coperta dall'app; la linea verde è l'area sicura per tutte.", "caption", True))
         self.panels.addWidget(self._page("Formato", "Dove lo pubblichi e come entra l'immagine. Le zone colorate sono coperte "
                                          "dall'app: tieni lì dentro i testi importanti.", [self.plat_card, sc], [self.fr_card]))
         self.split_card = SplitCard(state)
@@ -427,7 +430,14 @@ class SocialLook(QWidget):
             cols.addLayout(col, 1)
         lay.addLayout(cols)
         lay.addStretch(1)
-        return w
+        sa = scrolled(w)                                      # scorre solo se il testo è molto grande: normalmente sta tutto
+        sa.setMinimumWidth(w.minimumSizeHint().width() + 40)
+        return sa
+
+    def _preview_spec(self):
+        """La versione per la piattaforma scelta nell'anteprima (formato, zone, sottotitoli) come uscirebbe dall'export."""
+        p = self._current()
+        return PF.variant_spec(self.state.spec, p) if p else self.state.spec
 
     def set_panel(self, i: int) -> None:
         self.panels.setCurrentIndex(max(0, min(self.panels.count() - 1, i)))
@@ -624,6 +634,8 @@ class SocialExport(QWidget):
         self.go.clicked.connect(self.start)
         gr = QHBoxLayout()
         gr.addWidget(self.go)
+        self.preview = PreviewButton(state, pos_fn or (lambda: 0.0), lambda: self._first_variant(), "Guarda 10 secondi prima")
+        gr.addWidget(self.preview)
         self.thumb_btn = SecondaryButton("Miniatura YouTube…", "image", "Crea la miniatura con titolo, colori e loghi del marchio")
         self.thumb_btn.clicked.connect(self._thumb)
         gr.addWidget(self.thumb_btn)
@@ -656,6 +668,11 @@ class SocialExport(QWidget):
     def selected(self) -> list[PF.Platform]:
         ids = self.state.spec.social.platforms
         return [p for p in PF.all_platforms(self.root) if p.id in ids]
+
+    def _first_variant(self):
+        """Per la prova di 10 secondi: la prima piattaforma scelta, come uscirebbe dall'export."""
+        sel = self.selected()
+        return PF.variant_spec(self.state.spec, sel[0]) if sel else self.state.spec
 
     def showEvent(self, e):
         super().showEvent(e)

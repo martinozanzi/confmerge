@@ -196,3 +196,27 @@ def test_social_steps_clickable_and_silence_revert(win, clip):
     assert sh.next.text() == "Esporta"
     sh.next.click()
     assert sh.step == 7 and not sh.next.isVisibleTo(sh)
+
+
+def test_ten_second_preview_renders_with_effects(win, clip, tmp_path):
+    """«Guarda 10 secondi»: prepara un pezzo vero del video finito (formato della piattaforma, sottotitoli compresi)."""
+    st = win.social_state
+    sh = win.social
+    sh.start.start([clip])
+    assert wait(lambda: st.project is not None and sh.step == 1), "caricamento non riuscito"
+    from confmerge.spec import SubLine
+    st.spec.subtitles.enabled = True
+    st.spec.subtitles.lines = [SubLine(0.5, 3.0, "prova di anteprima")]
+    sh.show_step(2, animate=False)
+    got = []
+    pv = sh.look.preview
+    pv.ready.connect(got.append)
+    pv.start()
+    assert not pv.btn.isEnabled() and pv.msg.isVisibleTo(pv)               # si vede che sta lavorando
+    assert wait(lambda: bool(got), 120), "anteprima non pronta"
+    info = probe(got[0])
+    v = next(s for s in info["streams"] if s["codec_type"] == "video")
+    assert (v["width"], v["height"]) == (480, 852)                         # 9:16 della piattaforma scelta, lato corto 480
+    assert 8.0 < float(info["format"]["duration"]) < 10.6
+    assert pv.btn.isEnabled()
+    assert sh.export.preview is not None

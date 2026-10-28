@@ -121,14 +121,14 @@ def end_screen():
     ghost = dict(radius=0.012, opacity=0.9, outline=edge)
     return _scene(12.0, Background("gradient", "#0B0D12", "#1B2230", 90.0), [
         _t("t", "{titolo}", 0.5, 0.12, 0.05, "Poppins", True, "#FFFFFF", Anim("fade", 0.6), fit_width=0.8),
-        _s("v1", 0.27, 0.5, 0.36, 0.36 * 16 / 9 * 0.5625 * 1.0, "#FFFFFF", ai=Anim("pop", 0.5, "back"), start=0.3,
-           fill=Fill(color="#FFFFFF1A"), **ghost),
-        _s("v2", 0.73, 0.5, 0.36, 0.36 * 16 / 9 * 0.5625 * 1.0, "#FFFFFF", ai=Anim("pop", 0.5, "back"), start=0.5,
-           fill=Fill(color="#FFFFFF1A"), **ghost),
-        _t("l1", "Guarda anche", 0.27, 0.78, 0.028, "Poppins", False, "#CBD5E1", Anim("fade", 0.5), start=0.6),
-        _t("l2", "Guarda anche", 0.73, 0.78, 0.028, "Poppins", False, "#CBD5E1", Anim("fade", 0.5), start=0.8),
-        _s("sub", 0.5, 0.86, 0.12, 0.12 * 16 / 9, "#FF0033", shape="ellipse", ai=Anim("pop", 0.6, "back"), start=0.9),
-        _t("h", "{social}", 0.5, 0.95, 0.03, "Poppins", True, "#FFFFFF", Anim("fade", 0.6), start=1.0, fit_width=0.4)])
+        _s("v1", 0.27, 0.44, 0.36, 0.36 * 16 / 9 * 0.5625 * 1.0, "#FFFFFF", ai=Anim("pop", 0.5, "back"), start=0.3,
+           fill=Fill(color="#1AFFFFFF"), **ghost),
+        _s("v2", 0.73, 0.44, 0.36, 0.36 * 16 / 9 * 0.5625 * 1.0, "#FFFFFF", ai=Anim("pop", 0.5, "back"), start=0.5,
+           fill=Fill(color="#1AFFFFFF"), **ghost),
+        _t("l1", "Guarda anche", 0.27, 0.68, 0.028, "Poppins", False, "#CBD5E1", Anim("fade", 0.5), start=0.6),
+        _t("l2", "Guarda anche", 0.73, 0.68, 0.028, "Poppins", False, "#CBD5E1", Anim("fade", 0.5), start=0.8),
+        _s("sub", 0.5, 0.82, 0.1, 0.1 * 16 / 9, "#FF0033", shape="ellipse", ai=Anim("pop", 0.6, "back"), start=0.9),
+        _t("h", "{social}", 0.5, 0.955, 0.028, "Poppins", True, "#FFFFFF", Anim("fade", 0.6), start=1.0, fit_width=0.4)])
 
 
 def follow():

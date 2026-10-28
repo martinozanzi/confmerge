@@ -180,7 +180,7 @@ def substitute(elements: list[Element], variables: dict[str, str] | None) -> lis
 
 LOWER_THIRD_STYLES = {
     "bar": "Barra", "pill": "Pillola", "line": "Linea", "card": "Scheda bianca", "gradient": "Sfumatura",
-    "tag": "Etichetta gialla", "underline": "Sottolineato", "social": "Social",
+    "tag": "Etichetta gialla", "underline": "Sottolineato", "social": "Social", "glass": "Vetro", "block": "Blocco",
 }
 
 
@@ -235,6 +235,17 @@ def lower_third_elements(lt: LowerThird, idx: int = 0, variables: dict[str, str]
         return [text("name", lt.name, x, y - 0.02, 0.05, bold=True, shadow=sh),
                 shape("ul", x + 0.09, y + 0.012, 0.18, 0.0045, lt.accent),
                 text("role", lt.role, x, y + 0.04, 0.03, "#FFFFFF", shadow=sh)]
+    if st == "glass":                                   # scheda trasparente «a vetro» con bordo sottile
+        return [shape("bg", x + 0.19, y, 0.38, 0.125, "#FFFFFF", 0.03, opacity=0.2, outline=Outline(0.0016, "#FFFFFF"),
+                      shadow=Shadow(True, "#000000", 0.03, 0.01, 90, 0.35)),
+                shape("dot", x + 0.03, y - 0.022, 0.011, 0.0196, lt.accent, shape_="ellipse"),
+                text("name", lt.name, x + 0.05, y - 0.022, 0.042, bold=True, shadow=Shadow(True, "#000000", 0.01, 0.003, 90, 0.5)),
+                text("role", lt.role, x + 0.05, y + 0.028, 0.027, "#FFFFFF", opacity=0.85)]
+    if st == "block":                                   # blocco pieno con il nome in maiuscolo, come nei video dei vlogger
+        return [shape("bg", x + 0.17, y - 0.02, 0.34, 0.075, lt.accent, 0.0),
+                text("name", lt.name, x + 0.014, y - 0.02, 0.058, "#0B0B0B", False, "Anton", uppercase=True),
+                shape("rbg", x + 0.13, y + 0.046, 0.26, 0.05, "#0B0B0B", 0.0),
+                text("role", lt.role, x + 0.012, y + 0.046, 0.027, "#FFFFFF", False, "Poppins")]
     if st == "social":
         return [shape("bg", x + 0.17, y, 0.34, 0.1, "#FFFFFF", 0.05, shadow=Shadow(True, "#000000", 0.014, 0.005, 90, 0.35)),
                 text("name", lt.name, x + 0.03, y - 0.017, 0.037, "#12151C", True),
