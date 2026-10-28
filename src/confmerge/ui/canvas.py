@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
@@ -17,7 +18,7 @@ from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
 from ..spec import RenderSpec, output_size, split_heights
 from ..templates import preview_variables
-from ..view import source_to_frame
+from ..view import has_transform, shrink_rect, source_to_frame, zoom_window
 from .theme import theme
 
 PREVIEW_W = 960
@@ -136,10 +137,11 @@ class Canvas(QWidget):
                 self._draw_split(p, W, H, spec, fw, fh)
             else:
                 social = self._is_social()
-                if social and spec.image.reframe == "blur" and abs(fw / fh - W / H) > 0.01:
-                    self._draw_blur_bg(p, W, H)
-                src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t, social)
-                p.drawImage(dst, self.frame, src)
+                if social:
+                    self._draw_main(p, W, H, spec, fw, fh)
+                else:
+                    src, dst = source_to_frame(fw, fh, spec.image, W, H, self.out_t, social)
+                    p.drawImage(dst, self.frame, src)
                 self._draw_slides(p, W, H)
         p.end()
         if self.mode == "crop":
@@ -168,6 +170,39 @@ class Canvas(QWidget):
             self._second_cache[key] = img
         return self._second_cache[key]
 
+    def _draw_main(self, p: QPainter, W: int, Hm: int, spec: RenderSpec, fw: int, fh: int) -> None:
+        """Il tuo video (Studio Social) nel riquadro W×Hm, con inquadratura e con l'ingrandimento/riduzione scelti: come l'export."""
+        im = spec.image
+        if not has_transform(im):
+            if im.reframe == "blur" and abs(fw / fh - W / Hm) > 0.01:
+                self._draw_blur_bg(p, W, Hm)
+            src, dst = source_to_frame(fw, fh, im, W, Hm, self.out_t, True)
+            p.drawImage(dst, self.frame, src)
+            return
+        if im.vscale > 1.0:                                  # ingrandito: finestra del riquadro intero, portata a tutto schermo
+            base = new_image(W, Hm)
+            q = QPainter(base)
+            q.setRenderHint(QPainter.SmoothPixmapTransform)
+            q.fillRect(0, 0, W, Hm, Qt.black)
+            self._draw_main(q, W, Hm, replace(spec, image=replace(im, vscale=1.0)), fw, fh)
+            q.end()
+            zx, zy, zw, zh = zoom_window(im.vscale, im.vx, im.vy, W, Hm)
+            p.setRenderHint(QPainter.SmoothPixmapTransform)
+            p.drawImage(QRectF(0, 0, W, Hm), base, QRectF(zx, zy, zw, zh))
+            return
+        if im.reframe == "blur":                             # rimpicciolito: sfondo sfocato (o nero) e il video più piccolo sopra
+            self._draw_blur_bg(p, W, Hm)
+        fg = new_image(W, Hm)
+        q = QPainter(fg)
+        q.setRenderHint(QPainter.SmoothPixmapTransform)
+        flat = replace(im, vscale=1.0, reframe="fill" if im.reframe == "fill" else "bars")
+        src, dst = source_to_frame(fw, fh, flat, W, Hm, self.out_t, True)
+        q.drawImage(dst, self.frame, src)
+        q.end()
+        x, y, w, h = shrink_rect(im.vscale, im.vx, im.vy, W, Hm)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
+        p.drawImage(QRectF(x, y, w, h), fg)
+
     def _draw_split(self, p: QPainter, W: int, H: int, spec: RenderSpec, fw: int, fh: int) -> None:
         """Due riquadri uno sopra l'altro: il tuo video (con la sua inquadratura) e il secondo video."""
         sp = spec.split
@@ -177,10 +212,7 @@ class Canvas(QWidget):
         p.save()
         p.setClipRect(QRectF(0, y_main, W, h_main))
         p.translate(0, y_main)
-        if spec.image.reframe == "blur" and abs(fw / fh - W / h_main) > 0.01:
-            self._draw_blur_bg(p, W, h_main)
-        src, dst = source_to_frame(fw, fh, spec.image, W, h_main, self.out_t, True)
-        p.drawImage(dst, self.frame, src)
+        self._draw_main(p, W, h_main, spec, fw, fh)
         p.restore()
         p.save()
         p.setClipRect(QRectF(0, y_2, W, h_2))
@@ -190,9 +222,14 @@ class Canvas(QWidget):
             p.setPen(QColor("#d0d4dc"))
             p.drawText(QRectF(0, y_2, W, h_2), Qt.AlignCenter, "Secondo video")
         else:
-            s = max(W / sec.width(), h_2 / sec.height())
+            z = min(max(sp.second_scale, 1.0), 3.0)
+            s = max(W / sec.width(), h_2 / sec.height()) * z
             w, h = sec.width() * s, sec.height() * s
-            p.drawImage(QRectF(-(w - W) * min(1.0, max(0.0, sp.second_x)), y_2 - (h - h_2) / 2, w, h), sec)
+            if sp.mask:                                      # fuori dalla forma resta nero, come nell'export
+                from ..render.masks import shape_path
+                p.setClipPath(shape_path(QRectF(0, y_2, W, h_2), sp.mask, sp.mask_radius))
+            p.drawImage(QRectF(-(w - W) * min(1.0, max(0.0, sp.second_x)),
+                               y_2 - (h - h_2) * min(1.0, max(0.0, sp.second_y)), w, h), sec)
         p.restore()
 
     def _draw_subtitle(self, img: QImage, W: int, H: int) -> QImage:

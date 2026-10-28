@@ -244,3 +244,163 @@ def test_animated_overlay_with_transparent_background(qapp, world, tmp_path):
     assert not (c_edge.red() > 200 and c_edge.green() < 60)                                      # fuori dal quadrato si vede il video
     p0 = before.pixelColor(270, 480)
     assert not (p0.red() > 200 and p0.green() < 60)                                              # prima dell'inizio non c'è
+
+
+# ------------------------------------------------------------------------------------------------ trasformazione e maschere
+def _export_frame(world, tmp_path, spec, name, t=1.0, keep=((0.0, 3.0),)):
+    d, p, clips = world
+    p.keep = [list(k) for k in keep]
+    out = tmp_path / f"{name}.mp4"
+    ee.run_export(p, clips, spec, out, 0.0, p.total_duration, lambda f, s: None)
+    return _frame(out, tmp_path, name, t)
+
+
+def _spec916(mode="fill"):
+    s = base_spec()
+    s.image.aspect, s.image.reframe = "9:16", mode
+    return s
+
+
+def _mean_diff(a, b, size=(135, 240)):
+    from PySide6.QtCore import Qt
+    a = a.scaled(*size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage_RGB())
+    b = b.scaled(*size, Qt.IgnoreAspectRatio, Qt.SmoothTransformation).convertToFormat(QImage_RGB())
+    tot = 0
+    for y in range(0, size[1], 3):
+        for x in range(0, size[0], 3):
+            ca, cb = a.pixelColor(x, y), b.pixelColor(x, y)
+            tot += abs(ca.red() - cb.red()) + abs(ca.green() - cb.green()) + abs(ca.blue() - cb.blue())
+    return tot / ((size[1] // 3) * (size[0] // 3) * 3)
+
+
+def QImage_RGB():
+    from PySide6.QtGui import QImage
+    return QImage.Format_RGB32
+
+
+def test_main_video_zoom_in_crops_and_pans(qapp, world, tmp_path):
+    base = _export_frame(world, tmp_path, _spec916(), "z1")
+    s = _spec916()
+    s.image.vscale, s.image.vx, s.image.vy = 2.0, 0.5, 0.5
+    zoom = _export_frame(world, tmp_path, s, "z2")
+    from confmerge.view import zoom_window
+    x, y, w, h = zoom_window(2.0, 0.5, 0.5, 540, 960)
+    from PySide6.QtCore import QRect
+    assert _mean_diff(zoom, base.copy(QRect(x, y, w, h))) < 14              # il fotogramma ingrandito = la finestra centrale
+    assert _mean_diff(zoom, base) > 20
+    s.image.vx = 0.0                                                         # spostato: la finestra va tutta a sinistra
+    left = _export_frame(world, tmp_path, s, "z3")
+    x, y, w, h = zoom_window(2.0, 0.0, 0.5, 540, 960)
+    assert x == 0 and _mean_diff(left, base.copy(QRect(x, y, w, h))) < 14
+
+
+@pytest.mark.parametrize("mode", ["bars", "blur"])
+def test_main_video_shrunk_sits_over_background(qapp, world, tmp_path, mode):
+    s = _spec916(mode)
+    s.image.vscale, s.image.vx, s.image.vy = 0.5, 0.5, 0.5
+    im = _export_frame(world, tmp_path, s, f"sh_{mode}")
+    corner, mid = im.pixelColor(10, 10), im.pixelColor(270, 480)
+    if mode == "bars":
+        assert corner.red() < 12 and corner.green() < 12 and corner.blue() < 12          # sfondo nero
+    else:
+        assert corner.red() + corner.green() + corner.blue() > 40                        # sfondo: lo stesso video sfocato
+    assert mid.red() + mid.green() + mid.blue() > 60
+    s.image.vx = 0.0                                                                      # tutto a sinistra
+    left = _export_frame(world, tmp_path, s, f"shl_{mode}")
+    from confmerge.view import shrink_rect
+    x, y, w, h = shrink_rect(0.5, 0.0, 0.5, 540, 960)
+    assert x == 0 and w == 270
+    inside, outside = left.pixelColor(x + 40, 480), left.pixelColor(540 - 20, 150)
+    assert inside.red() + inside.green() + inside.blue() > 60
+    if mode == "bars":
+        assert outside.red() < 12 and outside.green() < 12
+
+
+def test_preview_matches_export_for_main_transform(qapp, world, tmp_path):
+    """L'anteprima (Canvas) disegna ingrandimento e riduzione come l'export."""
+    from PySide6.QtGui import QImage
+    from confmerge.project import Project
+    from confmerge.ui.canvas import Canvas
+    from confmerge.ui.state import AppState
+    d, p, clips = world
+    for vs, mode in ((2.0, "fill"), (0.6, "bars"), (0.6, "blur")):
+        s = _spec916(mode)
+        s.image.vscale, s.image.vx, s.image.vy = vs, 0.4, 0.55
+        out = _export_frame(world, tmp_path, s, f"pm_{vs}_{mode}")
+        src = _frame(clips[0].path, tmp_path, f"src_{mode}", 1.0)
+        st = AppState(kind="social")
+        st.project = Project(clips=[str(clips[0].path)], audio="", total_duration=5.0, kind="social")
+        st.spec = s
+        cv = Canvas(st)
+        cv.resize(500, 800)
+        cv.set_frame(src)
+        img = cv.compose()
+        assert _mean_diff(out, img) < 22, (vs, mode)                                       # compressione e sfocatura: scarto piccolo
+
+
+def test_second_video_scale_position_and_masks(qapp, world, tmp_path):
+    d, p, clips = world
+    bars = d / "bars.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "smptebars=size=480x270:rate=25:duration=2",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", str(bars)], check=True)
+    s = _spec916()
+    s.split.enabled, s.split.path, s.split.main_on_top = True, str(bars), True
+    plain = _export_frame(world, tmp_path, s, "sec0")
+    # zoom 2× in alto a sinistra: il riquadro mostra solo l'angolo della foto
+    s.split.second_scale, s.split.second_x, s.split.second_y = 2.0, 0.0, 0.0
+    zoomed = _export_frame(world, tmp_path, s, "sec1")
+    assert _mean_diff(plain, zoomed) > 15
+    # maschere: angoli neri, centro pieno
+    s.split.second_scale, s.split.second_x, s.split.second_y = 1.0, 0.5, 0.5
+    for mask in ("rounded", "circle"):
+        s.split.mask, s.split.mask_radius = mask, 0.25
+        im = _export_frame(world, tmp_path, s, f"sec_{mask}")
+        c = im.pixelColor(4, 960 - 4)                                                      # angolo in basso a sinistra del riquadro
+        assert c.red() < 14 and c.green() < 14 and c.blue() < 14, mask
+        mid = im.pixelColor(270, 720)
+        assert mid.red() + mid.green() + mid.blue() > 60
+        edge = im.pixelColor(270, 960 - 3)                                                 # metà del lato: per il cerchio è già fuori
+        if mask == "rounded":
+            assert edge.red() + edge.green() + edge.blue() > 60
+    # anteprima: stessa forma nel Canvas
+    from confmerge.project import Project
+    from confmerge.ui.canvas import Canvas
+    from confmerge.ui.state import AppState
+    st = AppState(kind="social")
+    st.project = Project(clips=[str(clips[0].path)], audio="", total_duration=5.0, kind="social")
+    st.spec = s
+    cv = Canvas(st)
+    cv.resize(500, 800)
+    cv.set_frame(_frame(clips[0].path, tmp_path, "srcm", 1.0))
+    W, H = cv.frame_size()
+    img = cv.compose()
+    cc = img.pixelColor(3, H - 3)
+    assert cc.red() < 14 and cc.green() < 14 and cc.blue() < 14
+
+
+def test_clip_overlay_mask_and_image_mask(qapp, world, tmp_path):
+    from PySide6.QtGui import QImage
+    from confmerge.render.model import Element
+    from confmerge.render.text_renderer import render_element
+    # immagine con maschera cerchio: angoli trasparenti, centro pieno (compositore)
+    png = tmp_path / "sq.png"
+    sq = QImage(100, 100, QImage.Format_ARGB32)
+    sq.fill(0xFFFF0000)
+    sq.save(str(png))
+    el = Element(id="i", kind="image", path=str(png), width=0.4, x=0.5, y=0.5, mask="circle")
+    lay = render_element(el, 500, 500)
+    assert lay.pixelColor(250, 250).alpha() == 255 and lay.pixelColor(155, 155).alpha() < 10
+    el.mask = "rounded"
+    lay = render_element(el, 500, 500)
+    assert lay.pixelColor(152, 152).alpha() < 10 and lay.pixelColor(250, 152).alpha() > 240
+    # clip con maschera nel filtergraph
+    d, p, clips = world
+    ov = tmp_path / "ovsq.mov"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red:size=200x200:rate=25:duration=1,format=rgba",
+                    "-c:v", "qtrle", str(ov)], check=True)
+    s = _spec916()
+    s.graphics.elements = [Element(id="o", kind="clip", path=str(ov), width=0.5, x=0.5, y=0.5, targets=["main"], mask="circle")]
+    im = _export_frame(world, tmp_path, s, "clipmask")
+    centre, corner = im.pixelColor(270, 480), im.pixelColor(270 - 130, 480 - 130)      # il quadrato è 270 px: lato 135 dal centro
+    assert centre.red() > 200 and centre.green() < 60
+    assert not (corner.red() > 200 and corner.green() < 60)                               # fuori dal cerchio si vede il video

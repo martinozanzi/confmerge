@@ -16,6 +16,7 @@ from .project import Project
 from .render import compositor
 from .render.model import Element, Scene, lower_third_elements, substitute
 from .spec import RenderSpec, audio_bitrate_bps, output_size, split_heights, video_bitrate_bps
+from .view import shrink_rect, zoom_window
 
 MAX_SAMPLE_FADE = 0.0
 
@@ -47,6 +48,7 @@ class _G:
         self.n = 0
         self.f: list[str] = []
         self.uses: dict[str, list[str]] = {}
+        self.workdir = Path(".")
         self.second_audio = False
 
     def inp(self, *args: str) -> int:
@@ -119,23 +121,55 @@ def _main_chain_for_clip(c: MediaInfo, spec: RenderSpec, W: int, H: int, fps: fl
     ar_src, ar_out = sw / max(sh, 1), W / H
     mode = im.reframe if social else ("fill" if im.vertical_mode == "crop" else "bars")
     tail = f"fps={fps:.5f},setsar=1,format=yuv420p"
+    if social and im.vscale < 0.995:                       # rimpicciolito: il video sta sopra lo sfondo (sfocato o nero)
+        return _shrunk_chain(ch, im, mode, W, H, tail, tag)
+    zoom = ""
+    if social and im.vscale > 1.005:                       # ingrandito: finestra ritagliata (si sposta con vx, vy) e riportata a tutto schermo
+        zx, zy, zw, zh = zoom_window(im.vscale, im.vx, im.vy, W, H)
+        zoom = f"crop={zw}:{zh}:{zx}:{zy},scale={W}:{H},"
     if abs(ar_src - ar_out) < 0.01:
         ch.append(f"scale={W}:{H}")
+        if zoom:
+            ch.append(zoom.rstrip(","))
     elif mode == "fill":
         rx, ry = max(0.0, min(1.0, im.reframe_x)), max(0.0, min(1.0, im.reframe_y))
         ch.append(f"scale={W}:{H}:force_original_aspect_ratio=increase,"
-                  f"crop={W}:{H}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*{ry:.4f}'")
+                  f"crop={W}:{H}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*{ry:.4f}'" + (f",{zoom.rstrip(',')}" if zoom else ""))
     elif mode == "blur":
         sw_, sh_ = max(2, W // 6 // 2 * 2), max(2, H // 6 // 2 * 2)
         pre = ",".join(ch + ["split=2[bg%s][fg%s]" % (tag, tag)])
         bg = (f"[bg{tag}]scale={sw_}:{sh_}:force_original_aspect_ratio=increase,crop={sw_}:{sh_},gblur=sigma=5,"
               f"scale={W}:{H},eq=brightness=-0.12[bgb{tag}]")
         fg = f"[fg{tag}]scale={W}:{H}:force_original_aspect_ratio=decrease[fgs{tag}]"
-        return f"{pre};{bg};{fg};[bgb{tag}][fgs{tag}]overlay=(W-w)/2:(H-h)/2,{tail}"
+        return f"{pre};{bg};{fg};[bgb{tag}][fgs{tag}]overlay=(W-w)/2:(H-h)/2," + zoom + tail
     else:
         ch.append(f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:black")
+        if zoom:
+            ch.append(zoom.rstrip(","))
     ch.append(tail)
     return ",".join(ch)
+
+
+def _shrunk_chain(ch: list[str], im, mode: str, W: int, H: int, tail: str, tag: str) -> str:
+    """Video rimpicciolito (vscale < 1) sopra lo sfondo: «Sfocato» = lo stesso video sfocato a tutto schermo, altrimenti nero.
+    Il primo piano è quello che si vedrebbe a scala 1 (ritagliato se «Riempi», intero altrimenti), ridotto e posizionato."""
+    x, y, w, h = shrink_rect(im.vscale, im.vx, im.vy, W, H)
+    pre = ",".join(ch + [f"split=2[bg{tag}][fg{tag}]"])
+    if mode == "blur":
+        sw_, sh_ = max(2, W // 6 // 2 * 2), max(2, H // 6 // 2 * 2)
+        bg = (f"[bg{tag}]scale={sw_}:{sh_}:force_original_aspect_ratio=increase,crop={sw_}:{sh_},gblur=sigma=5,"
+              f"scale={W}:{H},eq=brightness=-0.12[bgb{tag}]")
+    else:
+        bg = f"[bg{tag}]scale={W}:{H},format=yuv420p,lutyuv=y=16:u=128:v=128[bgb{tag}]"
+    if mode == "fill":
+        rx, ry = max(0.0, min(1.0, im.reframe_x)), max(0.0, min(1.0, im.reframe_y))
+        fit = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*{ry:.4f}',"
+               f"scale={w}:{h}")
+    else:                                                   # intero: largo come il riquadro ridotto, alto in proporzione
+        fit = f"scale={w}:{h}:force_original_aspect_ratio=decrease"
+    fg = f"[fg{tag}]{fit}[fgs{tag}]"
+    cx, cy = x + w / 2, y + h / 2                           # il centro resta quello scelto anche se il pezzo è più piccolo del riquadro
+    return f"{pre};{bg};{fg};[bgb{tag}][fgs{tag}]overlay=x='{cx:.1f}-w/2':y='{cy:.1f}-h/2',{tail}"
 
 
 def _clip_audio(k: int, seg) -> str:
@@ -153,10 +187,22 @@ def _stack_second(g: "_G", sp, W: int, top_h: int, gap_h: int, bot_h: int, D: fl
     """Secondo video nel suo riquadro (riempie, con inquadratura regolabile) e i due riquadri uno sopra l'altro → [vc]."""
     from .media_scan import media_info
     h2 = bot_h if sp.main_on_top else top_h
-    rx = max(0.0, min(1.0, sp.second_x))
+    rx, ry = max(0.0, min(1.0, sp.second_x)), max(0.0, min(1.0, sp.second_y))
+    z = min(max(sp.second_scale, 1.0), 3.0)
     k = g.inp("-stream_loop", "-1", "-ss", f"{max(0.0, sp.second_start):.3f}", "-i", str(sp.path))
-    g.f.append(f"[{k}:v:0]scale={W}:{h2}:force_original_aspect_ratio=increase,crop={W}:{h2}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*0.5',"
-               f"fps={fps:.5f},setsar=1,format=yuv420p,trim=duration={D:.4f},setpts=PTS-STARTPTS[v2]")
+    raw = "v2raw" if sp.mask else "v2"
+    g.f.append(f"[{k}:v:0]scale={round(W * z)}:{round(h2 * z)}:force_original_aspect_ratio=increase,"
+               f"crop={W}:{h2}:x='(iw-ow)*{rx:.4f}':y='(ih-oh)*{ry:.4f}',"
+               f"fps={fps:.5f},setsar=1,format=yuv420p,trim=duration={D:.4f},setpts=PTS-STARTPTS[{raw}]")
+    if sp.mask:                                             # forma del riquadro: fuori dalla forma resta nero
+        from .render.masks import mask_image
+        png = g.workdir / "mask_second.png"
+        mask_image(W, h2, sp.mask, sp.mask_radius).save(str(png))
+        m = g.img_input(str(png), D + 1)
+        bg = g.inp("-f", "lavfi", "-i", f"color=c=black:s={W}x{h2}:r={fps:.5f}:d={D + 1:.3f}")
+        g.f.append(f"[{m}:v:0]format=gray[mk2]")
+        g.f.append("[v2raw][mk2]alphamerge[v2a]")
+        g.f.append(f"[{bg}:v:0][v2a]overlay=0:0:shortest=1,format=yuv420p[v2]")
     parts = ["[vcm]", "[v2]"] if sp.main_on_top else ["[v2]", "[vcm]"]
     if gap_h:
         c = g.inp("-f", "lavfi", "-i", f"color=c=black:s={W}x{gap_h}:r={fps:.5f}:d={D + 1:.3f}")
@@ -202,7 +248,18 @@ def _add_clip_overlays(g: "_G", cur: str, els: list[Element], W: int, H: int, D:
             fade += f",fade=t=in:st={a:.3f}:d={max(0.05, el.anim_in.duration):.3f}:alpha=1"
         if el.anim_out.kind != "none":
             fade += f",fade=t=out:st={max(a, b - el.anim_out.duration):.3f}:d={max(0.05, el.anim_out.duration):.3f}:alpha=1"
-        g.f.append(f"[{k}:v:0]format=rgba,scale={w}:-2,fps={g.fps:.5f}{op},setpts=PTS-STARTPTS+{a:.4f}/TB{fade}[{lab}]")
+        shape = ""
+        if el.mask:                                         # ritaglio a forma (arrotondato/cerchio) conservando l'alfa del clip
+            from .media_scan import media_info
+            from .render.masks import geq_alpha
+            try:
+                mi = media_info(el.path)
+                hh = max(2, round(w * mi.height / max(mi.width, 1) / 2) * 2)
+                shape = (f",scale={w}:{hh},format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':"
+                         f"a='{geq_alpha(w, hh, el.mask, el.mask_radius)}',format=rgba")
+            except Exception:  # noqa: BLE001 - senza le dimensioni il clip resta rettangolare
+                notes.append(f"Maschera non applicata a {Path(el.path).name}.")
+        g.f.append(f"[{k}:v:0]format=rgba,scale={w}:-2{shape},fps={g.fps:.5f}{op},setpts=PTS-STARTPTS+{a:.4f}/TB{fade}[{lab}]")
         g.f.append(f"[{cur}][{lab}]overlay=x={el.x * W:.2f}-w/2:y={el.y * H:.2f}-h/2:enable='between(t,{a:.4f},{b:.4f})':"
                    f"eof_action={'repeat' if el.loop else 'pass'}:shortest=0:format=auto[{out}]")
         cur = out
@@ -300,6 +357,7 @@ def build(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: f
         raise FFmpegError("L'intervallo di taglio è vuoto o troppo corto")
     enc = encoder or encoders.resolve_encoder(spec.export.encoder)
     g = _G(fps)
+    g.workdir = workdir
     notes: list[str] = []
     frames = 0
 

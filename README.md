@@ -44,6 +44,8 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    **Due video nello stesso reel**: la scheda omonima mette un secondo video sopra o sotto il tuo (altezza dei riquadri, inquadratura e punto di
    partenza del secondo, audio facoltativo con volume; se è più corto si ripete). **Overlay**: immagini o video con sfondo trasparente (PNG, GIF,
    WebM, MOV), quanti vuoi, con inizio/fine e animazione; con **Salva** un overlay entra nella raccolta e si riaggiunge con un clic in altri lavori.
+   Il video principale si può **ingrandire, rimpicciolire e spostare** (sfondo sfocato o nero), il secondo video si ingrandisce e si inquadra, e
+   overlay, immagini e secondo video si ritagliano a **forma** (arrotondata o cerchio): anteprima ed export coincidono.
    Nel kit del marchio il **logo** è il marchio completo con il nome, il **simbolo** solo lo stemma/emblema.
    Con **Modello di stile** salvi sottotitoli (tipo, grandezza, posizione), loghi, testi e immagini con un nome e li riapplichi ad altri video.
 4. **Esporta**: una versione per piattaforma dallo stesso lavoro (`nome_shorts.mp4`, `nome_youtube.mp4`…), con avviso se supera la durata massima.

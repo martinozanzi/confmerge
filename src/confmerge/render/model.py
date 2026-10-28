@@ -79,6 +79,8 @@ class Element:
     line_spacing: float = 1.0
     letter_spacing: float = 0.0   # frazione dell'altezza
     loop: bool = True             # clip: si ripete finché l'elemento è visibile
+    mask: str = ""                # immagine/clip: forma ritagliata: "" rettangolo | rounded | circle
+    mask_radius: float = 0.15     # raggio degli angoli (frazione del lato corto)
     hl_word: int = -1             # sottotitoli: indice della parola evidenziata (-1 = nessuna)
     hl_color: str = "#FFE600"
     hl_scale: float = 1.0

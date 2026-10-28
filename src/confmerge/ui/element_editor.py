@@ -6,6 +6,7 @@ from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QFileDialog, QFontComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QPlainTextEdit,
                                QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
+from ..render.masks import MASKS
 from ..render.model import ANIM_KINDS, EASINGS, Element
 from ..render.text_renderer import element_bbox
 from . import bind
@@ -163,6 +164,8 @@ class ElementEditor(QWidget):
         w.setLayout(row)
         f.addRow(w)
         f.addRow("Larghezza (%)", bind.spin(el, "width", 1, 100, 0.5, 1, "", 100, cb))
+        f.addRow("Maschera", bind.combo(el, "mask", [(v, k) for k, v in MASKS.items()], cb))
+        f.addRow("Angoli (%)", bind.spin(el, "mask_radius", 0, 50, 1, 0, "", 100, cb))
         f.addRow("Margine angolo (%)", bind.spin(el, "margin", 0, 20, 0.5, 1, "", 100, cb))
         corners = QHBoxLayout()
         for text, c in (("↖", "tl"), ("↗", "tr"), ("↙", "bl"), ("↘", "br")):

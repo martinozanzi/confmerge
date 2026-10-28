@@ -14,6 +14,42 @@ def fit_mode(im: ImageSettings, social: bool) -> tuple[str, float, float]:
     return im.vertical_mode, 0.5, 0.5
 
 
+MIN_VSCALE, MAX_VSCALE = 0.4, 3.0
+
+
+def _even(v: float) -> int:
+    return max(2, int(round(v / 2)) * 2)
+
+
+def zoom_window(s: float, vx: float, vy: float, W: int, H: int) -> tuple[int, int, int, int]:
+    """Ingrandimento (s > 1): finestra (x, y, w, h) del fotogramma W×H da mostrare a tutto schermo, centrata su (vx, vy)."""
+    s = min(max(s, 1.0), MAX_VSCALE)
+    w, h = _even(W / s), _even(H / s)
+    x = int(round(min(max(vx * W - w / 2, 0), W - w)))
+    y = int(round(min(max(vy * H - h / 2, 0), H - h)))
+    return x, y, w, h
+
+
+def shrink_rect(s: float, vx: float, vy: float, W: int, H: int) -> tuple[int, int, int, int]:
+    """Riduzione (s < 1): dove sta il video rimpicciolito (x, y, w, h) dentro il fotogramma W×H, tenuto dentro i bordi."""
+    s = min(max(s, MIN_VSCALE), 1.0)
+    w, h = _even(W * s), _even(H * s)
+    x = int(round(min(max(vx * W - w / 2, 0), W - w)))
+    y = int(round(min(max(vy * H - h / 2, 0), H - h)))
+    return x, y, w, h
+
+
+def has_transform(im: ImageSettings) -> bool:
+    """Il video principale è stato ingrandito o rimpicciolito (la posizione conta solo allora)."""
+    return abs(im.vscale - 1.0) > 0.005
+
+
+def mask_radius_px(mask: str, radius: float, w: float, h: float) -> float:
+    """Raggio (px) degli angoli di una forma w×h: «circle» arrotonda al massimo (cerchio, o pillola se non è quadrata)."""
+    half = min(w, h) / 2
+    return half if mask == "circle" else min(half, max(0.0, radius) * min(w, h))
+
+
 def source_to_frame(src_w: float, src_h: float, im: ImageSettings, W: int, H: int, out_t: float,
                     social: bool = False) -> tuple[QRectF, QRectF]:
     """(rettangolo sorgente da prelevare, rettangolo di destinazione nel frame W×H)."""
