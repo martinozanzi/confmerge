@@ -280,3 +280,40 @@ def test_look_toolbar_align_reset_and_split_selection(qapp, tmp_path):
     assert (e.x, e.y, e.size) == (0.5, 0.4, 0.06)
     look._item_selected("split", 0)
     assert not any(b.isEnabled() for b in look.align_btns) and not look.c_h.isEnabled() and look.reset_item.isEnabled()
+
+
+def test_main_video_pans_and_zooms_with_mouse(qapp):
+    from PySide6.QtCore import QPointF
+    from confmerge.project import Project
+    from confmerge.ui.canvas import Canvas
+    from confmerge.ui.state import AppState
+    st = AppState(kind="social")
+    st.project = Project(clips=[], audio="", total_duration=5.0, kind="social")
+    st.spec.image.aspect = "9:16"
+    cv = Canvas(st)
+    cv.resize(400, 700)
+    cv.social_edit = True
+    cv.show()
+    cv.set_frame(__import__("PySide6.QtGui", fromlist=["QImage"]).QImage(640, 360, __import__("PySide6.QtGui", fromlist=["QImage"]).QImage.Format_ARGB32))
+    W, H = cv.frame_size()
+    im = st.spec.image
+    # rimpicciolito: trascinare sposta il riquadro del video
+    im.vscale = 0.6
+    cv._video_press(QPointF(0.5, 0.5), W, H)
+    assert cv._split_drag and cv._split_drag[0] == "video"
+    cv._split_drag = ("video", im.vx, im.vy, im.reframe_x, 0.5, 0.5, 0.0)
+    cv._video_move(QPointF(0.6, 0.55))
+    assert im.vx == pytest.approx(0.6) and im.vy == pytest.approx(0.55)
+    # ingrandito: il video segue il mouse (la finestra si sposta al contrario)
+    im.vscale, im.vx, im.vy = 2.0, 0.5, 0.5
+    cv._split_drag = ("video", 0.5, 0.5, 0.5, 0.5, 0.5, 0.0)
+    cv._video_move(QPointF(0.6, 0.5))
+    assert im.vx == pytest.approx(0.45)
+    # rotellina: ingrandisce e si ferma sul 100 %
+    im.vscale = 1.0
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtGui import QWheelEvent
+    ev = QWheelEvent(QPointF(200, 300), QPointF(200, 300), QPoint(0, 120), QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
+                     Qt.NoScrollPhase, False)
+    cv.wheelEvent(ev)
+    assert im.vscale == pytest.approx(1.1)

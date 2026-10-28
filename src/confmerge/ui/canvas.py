@@ -633,7 +633,56 @@ class Canvas(QWidget):
         else:
             self.sel_item = None
             self.itemSelected.emit("", -1)
+            self._video_press(f, W, H)                    # nessun elemento: si sposta il video stesso
         self.update()
+
+    # --- il video principale si sposta e si ingrandisce con il mouse (rotellina = zoom)
+    def _main_region(self, W: int, H: int) -> QRectF:
+        r = placement.split_rect(self.state, W, H)
+        sp = self.state.spec.split
+        if r is None:
+            return QRectF(0, 0, W, H)
+        top, gap, bot = split_heights(sp, H)
+        return QRectF(0, 0, W, top) if sp.main_on_top else QRectF(0, top + gap, W, bot)
+
+    def _video_press(self, f: QPointF, W: int, H: int) -> None:
+        im = self.state.spec.image
+        reg = self._main_region(W, H)
+        if not self._is_social() or not reg.contains(f.x() * W, f.y() * H):
+            return
+        over = 0.0
+        if self.state.clips:                              # quanto il video «riempito» sporge ai lati (per far seguire il mouse)
+            c = self.state.clips[0]
+            ar = c.width / max(c.height, 1) * (1 - im.crop_l - im.crop_r) / max(0.05, 1 - im.crop_t - im.crop_b)
+            over = max(0.0, ar * reg.height() / W - 1.0)
+        self._split_drag = ("video", im.vx, im.vy, im.reframe_x, f.x(), f.y(), over if im.reframe == "fill" else 0.0)
+
+    def _video_move(self, f: QPointF) -> None:
+        from ..view import MAX_VSCALE, MIN_VSCALE
+        im = self.state.spec.image
+        _, vx0, vy0, rx0, fx0, fy0, over = self._split_drag
+        dx, dy = f.x() - fx0, f.y() - fy0
+        s = im.vscale
+        if s > 1.005:                                     # ingrandito: il video segue il mouse
+            im.vx, im.vy = min(1.0, max(0.0, vx0 - dx / s)), min(1.0, max(0.0, vy0 - dy / s))
+        elif s < 0.995:                                   # rimpicciolito: si sposta il riquadro
+            im.vx, im.vy = min(1.0, max(0.0, vx0 + dx)), min(1.0, max(0.0, vy0 + dy))
+        elif over > 0.001:                                # a misura piena: cambia la parte mostrata
+            im.reframe_x = min(1.0, max(0.0, rx0 - dx / over))
+        self.update()
+
+    def wheelEvent(self, e):
+        if not (self.social_edit and self.mode == "video" and self._is_social()):
+            return super().wheelEvent(e)
+        from ..view import MAX_VSCALE, MIN_VSCALE
+        im = self.state.spec.image
+        im.vscale = min(MAX_VSCALE, max(MIN_VSCALE, im.vscale * (1.1 ** (e.angleDelta().y() / 120))))
+        if abs(im.vscale - 1.0) < 0.03:
+            im.vscale = 1.0                               # si ferma sul 100 %
+        self.state.touch()
+        self.update()
+        self.itemsChanged.emit()
+        e.accept()
 
     def _split_overflow(self, r: QRectF) -> float:
         """Quanto il secondo video sporge in larghezza dal suo riquadro (frazione della larghezza): serve a far seguire il mouse."""
@@ -650,6 +699,9 @@ class Canvas(QWidget):
         sp = self.state.spec.split
         d = self._split_drag
         self._guides = []
+        if d[0] == "video":
+            self._video_move(f)
+            return
         if d[0] == "edge":
             y = min(0.75, max(0.25, f.y()))
             if not (e.modifiers() & Qt.AltModifier) and abs(y - 0.5) < 0.015:

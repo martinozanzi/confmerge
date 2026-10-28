@@ -400,6 +400,20 @@ class SocialLook(QWidget):
         self.fr_pos_lbl = label("Sposta l'inquadratura a sinistra o a destra:", "caption", True)
         self.fr_card.add(self.fr_pos_lbl)
         self.fr_card.add(self.fr_pos)
+        self.zoom_card = Card()
+        self.zoom_lbl = label("", "", True)
+        self.zoom_card.add(self.zoom_lbl)
+        self.zoom = QSlider(Qt.Horizontal)
+        self.zoom.setRange(40, 300)                        # % : sotto 100 rimpicciolisce, sopra ingrandisce
+        self.zoom.valueChanged.connect(self._zoom)
+        self.zoom_card.add(self.zoom)
+        zr = QHBoxLayout()
+        self.zoom_reset = SecondaryButton("Ripristina il video", "rotate-ccw", "Torna a zoom e posizione di partenza")
+        self.zoom_reset.clicked.connect(self._zoom_reset)
+        zr.addWidget(self.zoom_reset)
+        zr.addStretch(1)
+        self.zoom_card.lay.addLayout(zr)
+        self.zoom_card.add(label("Sull'anteprima: trascina il video per spostarlo, rotellina per ingrandire.", "caption", True))
         self.safe = Toggle("Mostra le zone coperte dall'app")
         self.safe.toggled.connect(self._safe)
         sc = Card()
@@ -410,7 +424,7 @@ class SocialLook(QWidget):
         sc.add(self.legend_box)
         sc.add(label("Ogni zona colorata è coperta dall'app; la linea verde è l'area sicura per tutte.", "caption", True))
         self.panels.addWidget(self._page("Formato", "Dove lo pubblichi e come entra l'immagine. Le zone colorate sono coperte "
-                                         "dall'app: tieni lì dentro i testi importanti.", [self.plat_card, sc], [self.fr_card]))
+                                         "dall'app: tieni lì dentro i testi importanti.", [self.plat_card, sc], [self.fr_card, self.zoom_card]))
         self.split_card = SplitCard(state)
         self.panels.addWidget(self._page("Due video nello stesso reel (facoltativo)", "Un secondo video sopra o sotto il tuo, "
                                          "per esempio quello a cui rispondi. Si può saltare.", [self.split_card]))
@@ -578,10 +592,31 @@ class SocialLook(QWidget):
         self.fr_pos.setValue(int(im.reframe_x * 100))
         self.fr_pos.blockSignals(False)
         self._frame_ui()
+        self._sync_zoom()
         durs = [PF.duration_warning(q, self.state.social.kept_seconds()) for q in self.selected()]
         self.warn.setText("\n".join(d for d in durs if d))
         self.warn.setVisible(any(durs))
         st.touch()
+
+    def _zoom(self, v: int):
+        self.state.spec.image.vscale = v / 100
+        self.zoom_lbl.setText(f"Grandezza del video: {v} %")
+        self.state.touch()
+        self.player.canvas.update()
+
+    def _zoom_reset(self):
+        im = self.state.spec.image
+        im.vscale, im.vx, im.vy, im.reframe_x, im.reframe_y = 1.0, 0.5, 0.5, 0.5, 0.5
+        self._sync_zoom()
+        self.state.touch()
+        self.player.canvas.update()
+
+    def _sync_zoom(self):
+        v = round(self.state.spec.image.vscale * 100)
+        self.zoom.blockSignals(True)
+        self.zoom.setValue(v)
+        self.zoom.blockSignals(False)
+        self.zoom_lbl.setText(f"Grandezza del video: {v} %")
 
     def _frame_ui(self):
         mode = self.state.spec.image.reframe
