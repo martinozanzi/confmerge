@@ -14,6 +14,7 @@ from ..render.model import Anim, Background, Element, Fill, LowerThird, Outline
 from ..spec import ASPECTS, LAYOUTS, RES_SHORT, LayoutSpan, SlideChange, output_size
 from . import bind
 from .layer_list import LayerList
+from .theme import theme
 from .mini_timeline import MiniTimeline
 from .widgets import Badge, GhostButton, IconButton, PrimaryButton, SecondaryButton, Section, Toggle, label
 from .canvas import Canvas
@@ -754,6 +755,45 @@ TAB_TITLES = {"image": "Formato", "overlay": "Elementi", "title": "Titolo inizia
               "lt": "Nome relatore", "caption": "Scritte", "subs": "Sottotitoli", "trans": "Transizioni", "slides": "Slide e PiP", "credit": "Credito"}
 
 
+class PillBar(QWidget):
+    """Scelta della scheda con pulsanti a pillola che vanno a capo: sostituisce la barra di linguette."""
+    picked = Signal(int)
+
+    def __init__(self, labels: list[str], parent=None):
+        super().__init__(parent)
+        self.buttons: list[QPushButton] = []
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(6)
+        per_row = 4
+        for i, text in enumerate(labels):
+            b = QPushButton(text)
+            b.setCheckable(True)
+            b.setCursor(Qt.PointingHandCursor)
+            b.setProperty("variant", "pill")
+            b.clicked.connect(lambda _=False, k=i: (self.set_current(k), self.picked.emit(k)))
+            self.buttons.append(b)
+            grid.addWidget(b, i // per_row, i % per_row)
+        for c in range(per_row):
+            grid.setColumnStretch(c, 1)
+        self._style()
+        theme.changed.connect(self._style)
+        self.set_current(0)
+
+    def _style(self) -> None:
+        t = theme.t
+        self.setStyleSheet(
+            f"QPushButton[variant=\"pill\"] {{ background: {t.surface}; border: 1px solid {t.border}; border-radius: 15px; "
+            f"padding: 4px 10px; min-height: 22px; color: {t.text2}; }}"
+            f"QPushButton[variant=\"pill\"]:hover {{ background: {t.hover}; color: {t.text}; }}"
+            f"QPushButton[variant=\"pill\"]:checked {{ background: {t.accent}; border-color: {t.accent}; color: {t.on_accent}; "
+            f"font-weight: 600; }}")
+
+    def set_current(self, i: int) -> None:
+        for k, b in enumerate(self.buttons):
+            b.setChecked(k == i)
+
+
 class GraphicsPage(QWidget):
     goPhase = Signal(str)          # "decorations": apre la fase «Logo e decorazioni»
 
@@ -769,9 +809,9 @@ class GraphicsPage(QWidget):
         self.canvas = Canvas(state)
         self.canvas.elementMoved.connect(lambda *_: self.state.touch())
         main = QVBoxLayout(self)
-        main.addWidget(label(title, "title"))
-        if subtitle:
-            main.addWidget(label(subtitle, "muted", True))
+        main.setSpacing(6)
+        if subtitle:                                         # il nome della fase sta già nella barra in alto
+            main.addWidget(label(subtitle, "caption", True))
         bar = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText("Cerca un'impostazione…")
@@ -845,11 +885,20 @@ class GraphicsPage(QWidget):
                 self.tabs.addTab(scrolled(SlidesTab(state, self)), TAB_TITLES[k])
             elif k == "credit":
                 self.tabs.addTab(scrolled(CreditTab(state)), TAB_TITLES[k])
-        if len(self.kinds) == 1:
-            self.tabs.tabBar().hide()
+        self.tabs.tabBar().hide()                            # al posto delle linguette: pulsanti a pillola, più moderni
+        right = QWidget()
+        rl = QVBoxLayout(right)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(8)
+        self.pills = PillBar([self.tabs.tabText(i) for i in range(self.tabs.count())])
+        self.pills.picked.connect(self.tabs.setCurrentIndex)
+        self.tabs.currentChanged.connect(self.pills.set_current)
+        self.pills.setVisible(len(self.kinds) > 1)
+        rl.addWidget(self.pills)
+        rl.addWidget(self.tabs, 1)
         self.tabs.currentChanged.connect(self._tab)
-        self.tabs.setMinimumWidth(545)
-        split.addWidget(self.tabs)
+        right.setMinimumWidth(545)
+        split.addWidget(right)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 4)
         main.addWidget(split, 1)

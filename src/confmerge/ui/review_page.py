@@ -323,9 +323,9 @@ class ReviewPage(QWidget):
         super().__init__(parent)
         self.state = state
         main = QVBoxLayout(self)
-        main.addWidget(label("Sincronia e tagli", "title"))
+        main.setSpacing(6)
         main.addWidget(label("Due controlli veloci: la voce deve coincidere con le labbra e bisogna scegliere dove "
-                             "inizia e finisce la conferenza.", "muted", True))
+                             "inizia e finisce la conferenza.", "caption", True))
         split = QSplitter(Qt.Horizontal)
         left = QWidget()
         ll = QVBoxLayout(left)
