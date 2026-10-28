@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
@@ -14,7 +15,7 @@ from ..render import anchors
 from ..render import compositor
 from ..render.model import Element, Scene, lower_third_elements, substitute
 from ..render.text_renderer import element_bbox, new_image
-from ..spec import RenderSpec, output_size
+from ..spec import RenderSpec, output_size, split_heights
 from ..view import source_to_frame
 from .theme import theme
 
@@ -57,6 +58,7 @@ class Canvas(QWidget):
         self._drag_off = QPointF()
         self._crop_drag: QPointF | None = None
         self._crop_rect: QRectF | None = None
+        self._second_cache: dict = {}
         state.spec_changed.connect(self.update)           # testi, immagini, sottotitoli: l'anteprima segue subito ogni modifica
         state.profile_changed.connect(self.update)
 
@@ -129,6 +131,8 @@ class Canvas(QWidget):
             if self.mode == "crop":
                 s = min(W / fw, H / fh)
                 p.drawImage(QRectF((W - fw * s) / 2, (H - fh * s) / 2, fw * s, fh * s), self.frame)
+            elif self._is_social() and spec.split.enabled and spec.split.path:
+                self._draw_split(p, W, H, spec, fw, fh)
             else:
                 social = self._is_social()
                 if social and spec.image.reframe == "blur" and abs(fw / fh - W / H) > 0.01:
@@ -141,6 +145,54 @@ class Canvas(QWidget):
             return img
         out = compositor.render_frame(self._all_elements(), W, H, self.out_t, self._main_dur(), img)
         return self._draw_subtitle(out, W, H)
+
+    def _second_frame(self, path: str, start: float) -> QImage | None:
+        """Primo fotogramma del secondo video (da `start`): nell'anteprima il secondo video resta fermo. Si calcola una volta."""
+        key = (path, round(start, 2))
+        if key not in self._second_cache:
+            img = None
+            try:
+                import subprocess
+                import tempfile
+                from .. import ffmpeg_wrapper as fw
+                with tempfile.TemporaryDirectory() as td:
+                    png = Path(td) / "f.png"
+                    subprocess.run([fw.ffmpeg_path(), "-v", "error", "-nostdin", "-y", "-ss", f"{max(0.0, start):.3f}", "-i", path,
+                                    "-frames:v", "1", "-vf", "scale=480:-2", str(png)], capture_output=True, timeout=20,
+                                   creationflags=fw._CREATIONFLAGS)
+                    q = QImage(str(png))
+                    img = q if not q.isNull() else None
+            except Exception:  # noqa: BLE001 - senza fotogramma si disegna un segnaposto
+                img = None
+            self._second_cache[key] = img
+        return self._second_cache[key]
+
+    def _draw_split(self, p: QPainter, W: int, H: int, spec: RenderSpec, fw: int, fh: int) -> None:
+        """Due riquadri uno sopra l'altro: il tuo video (con la sua inquadratura) e il secondo video."""
+        sp = spec.split
+        top, gap, bot = split_heights(sp, H)
+        y_main, h_main = (0, top) if sp.main_on_top else (top + gap, bot)
+        y_2, h_2 = (top + gap, bot) if sp.main_on_top else (0, top)
+        p.save()
+        p.setClipRect(QRectF(0, y_main, W, h_main))
+        p.translate(0, y_main)
+        if spec.image.reframe == "blur" and abs(fw / fh - W / h_main) > 0.01:
+            self._draw_blur_bg(p, W, h_main)
+        src, dst = source_to_frame(fw, fh, spec.image, W, h_main, self.out_t, True)
+        p.drawImage(dst, self.frame, src)
+        p.restore()
+        p.save()
+        p.setClipRect(QRectF(0, y_2, W, h_2))
+        sec = self._second_frame(sp.path, sp.second_start)
+        if sec is None:
+            p.fillRect(QRectF(0, y_2, W, h_2), QColor("#3a3f4b"))
+            p.setPen(QColor("#d0d4dc"))
+            p.drawText(QRectF(0, y_2, W, h_2), Qt.AlignCenter, "Secondo video")
+        else:
+            s = max(W / sec.width(), h_2 / sec.height())
+            w, h = sec.width() * s, sec.height() * s
+            p.drawImage(QRectF(-(w - W) * min(1.0, max(0.0, sp.second_x)), y_2 - (h - h_2) / 2, w, h), sec)
+        p.restore()
 
     def _draw_subtitle(self, img: QImage, W: int, H: int) -> QImage:
         st = self.state.spec.subtitles

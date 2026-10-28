@@ -10,15 +10,15 @@ from PySide6.QtWidgets import QAbstractItemView, QHBoxLayout, QLabel, QListWidge
 from ..render.model import Element
 from .theme import ICON, theme
 
-KIND_ICON = {"text": "type", "image": "image", "shape": "shapes", "bar": "activity"}
-KIND_NAME = {"text": "Testo", "image": "Immagine", "shape": "Forma", "bar": "Barra"}
+KIND_ICON = {"text": "type", "image": "image", "clip": "film", "shape": "shapes", "bar": "activity"}
+KIND_NAME = {"text": "Testo", "image": "Immagine", "clip": "Overlay animato", "shape": "Forma", "bar": "Barra"}
 
 
 def element_title(e: Element) -> str:
     if e.kind == "text":
         t = e.text.replace("\n", " ").strip()
         return t[:30] or "Testo vuoto"
-    if e.kind == "image":
+    if e.kind in ("image", "clip"):
         return Path(e.path).name if e.path else "Immagine"
     return KIND_NAME.get(e.kind, e.kind)
 

@@ -198,12 +198,34 @@ class SocialSettings:
 
 
 @dataclass
+class SplitSettings:
+    """Studio Social: un secondo video nello stesso reel, uno sopra e uno sotto (come nei reel di commento)."""
+    enabled: bool = False
+    path: str = ""                 # il secondo video
+    main_on_top: bool = True       # il tuo video sta sopra (altrimenti sotto)
+    ratio: float = 0.5             # parte dell'altezza che va al riquadro in ALTO
+    gap: float = 0.0               # linea nera fra i due riquadri (frazione dell'altezza)
+    second_x: float = 0.5          # inquadratura del secondo video: 0 = sinistra, 1 = destra
+    second_start: float = 0.0      # da quale secondo parte il secondo video
+    second_audio: bool = False     # si sente anche l'audio del secondo video
+    second_db: float = -12.0       # volume del secondo video rispetto al tuo (dB)
+
+
+def split_heights(sp: "SplitSettings", H: int) -> tuple[int, int, int]:
+    """Altezze (alto, linea, basso) in pixel, tutte pari, che sommate fanno H."""
+    top = max(2, round(H * min(0.8, max(0.2, sp.ratio)) / 2) * 2)
+    gap = round(H * min(0.05, max(0.0, sp.gap)) / 2) * 2
+    return top, gap, H - top - gap
+
+
+@dataclass
 class RenderSpec:
     image: ImageSettings = field(default_factory=ImageSettings)
     audio: AudioSettings = field(default_factory=AudioSettings)
     subtitles: SubtitleSettings = field(default_factory=SubtitleSettings)
     social: SocialSettings = field(default_factory=SocialSettings)
     brand: BrandSettings = field(default_factory=BrandSettings)
+    split: SplitSettings = field(default_factory=SplitSettings)
     graphics: Graphics = field(default_factory=Graphics)
     slides: SlideSettings = field(default_factory=SlideSettings)
     credit: CreditSettings = field(default_factory=CreditSettings)

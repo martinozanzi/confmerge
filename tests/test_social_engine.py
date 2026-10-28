@@ -172,3 +172,75 @@ def test_social_loudnorm_single_pass(qapp, world, tmp_path):
     out = tmp_path / "ln.mp4"
     rep = ee.run_export(p, clips, spec, out, 0.0, p.total_duration, lambda f, s: None)
     assert rep.loud_before is None and out.exists()
+
+
+@pytest.fixture(scope="module")
+def red_clip(world):
+    d = world[0]
+    wavfile.write(str(d / "r.wav"), SR, tone(2000, 2))
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=0xFF0000:size=480x270:rate=25:duration=2",
+                    "-i", str(d / "r.wav"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", str(d / "red.mp4")],
+                   check=True)
+    return d / "red.mp4"
+
+
+def _frame(path, tmp, name, t=1.0):
+    png = tmp / f"{name}.png"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(t), "-i", str(path), "-frames:v", "1", str(png)], check=True)
+    from PySide6.QtGui import QImage
+    return QImage(str(png))
+
+
+def test_two_videos_stacked_top_and_bottom(qapp, world, red_clip, tmp_path):
+    d, p, clips = world
+    p.keep = [[0.0, 3.0]]
+    spec = base_spec()
+    spec.image.aspect, spec.image.reframe = "9:16", "fill"
+    spec.split.enabled, spec.split.path = True, str(red_clip)           # il secondo dura 2 s: dentro il reel di 3 s si ripete
+    out = tmp_path / "split.mp4"
+    ee.run_export(p, clips, spec, out, 0.0, p.total_duration, lambda f, s: None)
+    v = next(s for s in probe(out)["streams"] if s["codec_type"] == "video")
+    assert (v["width"], v["height"]) == (540, 960)
+    for t in (0.5, 2.5):                                                  # anche dopo che il secondo video è finito una volta
+        im = _frame(out, tmp_path, f"s{t}", t)
+        bottom, top = im.pixelColor(270, 800), im.pixelColor(270, 100)
+        assert bottom.red() > 200 and bottom.green() < 60 and bottom.blue() < 60, (t, bottom.name())
+        assert not (top.red() > 200 and top.green() < 60 and top.blue() < 60)
+    f = dominant_freqs(out, tmp_path, [(0.3, 1.7)])
+    assert abs(f[0] - 440) < 40, f                                        # audio del secondo video spento di default
+
+    spec.split.main_on_top, spec.split.ratio, spec.split.gap = False, 0.4, 0.02
+    spec.split.second_audio, spec.split.second_db = True, 0.0
+    out2 = tmp_path / "split2.mp4"
+    ee.run_export(p, clips, spec, out2, 0.0, p.total_duration, lambda f, s: None)
+    im = _frame(out2, tmp_path, "swap")
+    assert im.pixelColor(270, 100).red() > 200 and im.pixelColor(270, 100).green() < 60          # il secondo ora sta sopra
+    assert im.pixelColor(270, 394).red() < 20 and im.pixelColor(270, 394).green() < 20            # la linea nera fra 384 e 404
+    wav = tmp_path / "mix.wav"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(out2), "-vn", "-ac", "1", "-ar", str(SR), str(wav)], check=True)
+    _, x = wavfile.read(str(wav))
+    spec_ = np.abs(np.fft.rfft(x[int(0.3 * SR):int(1.7 * SR)].astype(float)))
+    freqs = np.fft.rfftfreq(len(x[int(0.3 * SR):int(1.7 * SR)]), 1 / SR)
+    assert spec_[np.argmin(abs(freqs - 2000))] > spec_.max() * 0.2                        # si sente anche il 2000 Hz
+
+
+def test_animated_overlay_with_transparent_background(qapp, world, tmp_path):
+    """Un overlay animato con trasparenza (MOV qtrle o GIF) sta sopra il video solo dove ha colore, e si ripete."""
+    from confmerge.render.model import Element
+    d, p, clips = world
+    p.keep = [[0.0, 3.0]]
+    ov = tmp_path / "ov.mov"
+    # quadrato rosso 100×100 su fondo trasparente, lungo 1 s (dentro un reel di 3 s si ripete)
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=red@1.0:size=100x100:rate=25:duration=1,format=rgba,"
+                    "pad=200:200:50:50:color=black@0.0", "-c:v", "qtrle", str(ov)], check=True)
+    spec = base_spec()
+    spec.image.aspect, spec.image.reframe = "9:16", "fill"
+    spec.graphics.elements = [Element(id="o", kind="clip", path=str(ov), width=0.5, x=0.5, y=0.5, targets=["main"], start=0.5)]
+    out = tmp_path / "ov.mp4"
+    res = ee.run_export(p, clips, spec, out, 0.0, p.total_duration, lambda f, s: None)
+    before, during = _frame(out, tmp_path, "b", 0.2), _frame(out, tmp_path, "d", 2.2)
+    c_mid, c_edge = during.pixelColor(270, 480), during.pixelColor(270 + 100, 480 + 100)        # centro del quadrato / angolo vuoto
+    assert c_mid.red() > 200 and c_mid.green() < 60 and c_mid.blue() < 60
+    assert not (c_edge.red() > 200 and c_edge.green() < 60)                                      # fuori dal quadrato si vede il video
+    p0 = before.pixelColor(270, 480)
+    assert not (p0.red() > 200 and p0.green() < 60)                                              # prima dell'inizio non c'è

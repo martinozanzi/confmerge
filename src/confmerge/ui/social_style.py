@@ -9,8 +9,10 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QInputDialog
                                QWidget)
 
 from .. import style_templates as ST
+from ..overlay_library import OverlayLibrary
 from ..render.anchors import ANCHORS
 from ..render.model import Element, Fill, Outline, Shadow
+from ..render.text_renderer import is_video_overlay
 from . import bind
 from .widgets import Card, GhostButton, SecondaryButton, label
 
@@ -28,24 +30,67 @@ class OverlaysCard(Card):
     def __init__(self, state, parent=None):
         super().__init__(parent)
         self.state = state
-        self.add(label("Testi e immagini sul video", "h2", True))
-        self.add(label("Per esempio il titolo fisso, il @canale o un adesivo. Restano nel punto scelto in ogni formato.", "caption", True))
+        self.add(label("Testi e overlay sul video", "h2", True))
+        self.add(label("Titolo fisso, @canale, adesivi, immagini o video con sfondo trasparente (PNG, GIF, WebM, MOV). Restano nel punto "
+                       "scelto in ogni formato; puoi metterne quanti vuoi.", "caption", True))
+        self.library = OverlayLibrary(state.settings.root)
         self.rows = QVBoxLayout()
         self.lay.addLayout(self.rows)
         r = QHBoxLayout()
         a = SecondaryButton("Aggiungi un testo", "type")
         a.clicked.connect(self.add_text)
-        b = SecondaryButton("Aggiungi un'immagine…", "image-plus")
+        b = SecondaryButton("Aggiungi un overlay…", "image-plus")
+        b.setToolTip("Immagine o video, anche con sfondo trasparente")
         b.clicked.connect(self.add_image)
         r.addWidget(a)
         r.addWidget(b)
         r.addStretch(1)
         self.lay.addLayout(r)
+        lr = QHBoxLayout()
+        self.saved = QComboBox()
+        self.saved.activated.connect(self._add_saved)
+        lr.addWidget(self.saved, 1)
+        self.del_saved = GhostButton("Elimina")
+        self.del_saved.setToolTip("Toglie dai salvati l'overlay scelto nel menu")
+        self.del_saved.clicked.connect(self._delete_saved)
+        lr.addWidget(self.del_saved)
+        self.lay.addLayout(lr)
         state.profile_changed.connect(self.sync)
         self.sync()
 
+    def _refresh_saved(self) -> None:
+        names = self.library.list()
+        self.saved.blockSignals(True)
+        self.saved.clear()
+        self.saved.addItem("Overlay salvati: aggiungi…" if names else "Nessun overlay salvato", "")
+        for n in names:
+            self.saved.addItem(n, n)
+        self.saved.blockSignals(False)
+        self.saved.setEnabled(bool(names))
+        self.del_saved.setEnabled(bool(names))
+
+    def _add_saved(self, _=0):
+        name = self.saved.currentData()
+        el = self.library.load(name) if name else None
+        if el:
+            self.state.spec.graphics.elements.append(el)
+            self.state.touch()
+            self.sync()
+
+    def _delete_saved(self):
+        name = self.saved.currentData()
+        if name and QMessageBox.question(self, "Elimina l'overlay", f"Togliere «{name}» dai salvati?") == QMessageBox.Yes:
+            self.library.delete(name)
+            self._refresh_saved()
+
+    def save_element(self, el: Element):
+        name, ok = QInputDialog.getText(self, "Salva l'overlay", "Nome (es. Bollino «Diretta»):")
+        if ok and name.strip():
+            self.library.save(name.strip(), el)
+            self._refresh_saved()
+
     def elements(self) -> list[Element]:
-        return [e for e in self.state.spec.graphics.elements if "main" in e.targets and e.kind in ("text", "image")]
+        return [e for e in self.state.spec.graphics.elements if "main" in e.targets and e.kind in ("text", "image", "clip")]
 
     def _set_anchor(self, el, anchor: str) -> None:
         """Passando a «Libero» l'elemento resta dove si vede (non salta alla posizione scritta nel modello)."""
@@ -57,6 +102,7 @@ class OverlaysCard(Card):
         el.anchor = anchor
 
     def sync(self):
+        self._refresh_saved()
         while self.rows.count():
             it = self.rows.takeAt(0)
             w = it.widget()
@@ -78,6 +124,10 @@ class OverlaysCard(Card):
             top.addWidget(bind.color(e.fill, "color", st.touch))
         else:
             top.addWidget(label(Path(e.path).name or "immagine", "", False), 1)
+        keep = GhostButton("Salva")
+        keep.setToolTip("Salva questo overlay per riusarlo in altri lavori")
+        keep.clicked.connect(lambda _=False, el=e: self.save_element(el))
+        top.addWidget(keep)
         look = GhostButton("Aspetto…")
         look.setToolTip("Carattere, colori, contorno, ombra, sfondo, animazione…")
         look.clicked.connect(lambda _=False, el=e: self.customize(el))
@@ -135,10 +185,12 @@ class OverlaysCard(Card):
         self.sync()
 
     def add_image(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Scegli l'immagine", "", "Immagini (*.png *.svg *.jpg *.jpeg *.webp)")
+        f, _ = QFileDialog.getOpenFileName(self, "Scegli l'overlay", "",
+                                           "Immagini e overlay (*.png *.svg *.jpg *.jpeg *.webp *.gif *.webm *.mov)")
         if not f:
             return
-        e = Element(id=uuid.uuid4().hex[:6], kind="image", path=f, width=0.14, anchor="tr", targets=["main"])
+        kind = "clip" if is_video_overlay(f) else "image"                  # GIF, WebM e MOV si muovono: sono video
+        e = Element(id=uuid.uuid4().hex[:6], kind=kind, path=f, width=0.14, anchor="tr", targets=["main"])
         self.state.spec.graphics.elements.append(e)
         self.state.touch()
         self.sync()

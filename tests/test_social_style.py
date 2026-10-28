@@ -196,3 +196,35 @@ def test_subtitle_margin_respects_platform_zone_in_preview_and_export(qapp):
     assert v.subtitles.margin == pytest.approx(0.27)
     st.position = "middle"
     assert S.effective_margin(st, [0.1, 0.25, 0, 0]) == 0.05
+
+
+def test_overlay_library_roundtrip_and_ui(qapp, tmp_path, monkeypatch):
+    from PySide6.QtGui import QImage
+    from confmerge.overlay_library import OverlayLibrary
+    from confmerge.ui.social_style import OverlaysCard
+    from confmerge.ui.state import AppState
+    png = tmp_path / "sticker.png"
+    img = QImage(60, 30, QImage.Format_ARGB32)
+    img.fill(0x80FF0000)                                                     # semitrasparente
+    img.save(str(png))
+    lib = OverlayLibrary(tmp_path / "root")
+    el = Element(id="x", kind="image", path=str(png), width=0.2, anchor="tr", opacity=0.8, targets=["main"])
+    lib.save("Bollino", el)
+    png.unlink()                                                             # l'originale sparisce: la copia resta
+    assert lib.list() == ["Bollino"]
+    back = lib.load("Bollino")
+    assert back.id != "x" and back.opacity == 0.8 and back.anchor == "tr" and back.path.endswith("Bollino.png")
+    assert QImage(back.path).format() != 0 and not QImage(back.path).isNull()
+    st = AppState(Settings(tmp_path / "cfg"), kind="social")
+    st.settings.root = tmp_path / "root"
+    card = OverlaysCard(st)
+    card.saved.setCurrentIndex(card.saved.findData("Bollino"))
+    card._add_saved()
+    assert [e.path.endswith("Bollino.png") for e in st.spec.graphics.elements] == [True] and card.rows.count() == 1
+    lib.delete("Bollino")
+    assert lib.list() == [] and not (tmp_path / "root" / "overlay_salvati" / "file" / "Bollino.png").exists()
+
+
+def test_gif_and_webm_overlays_become_clip_elements(qapp):
+    from confmerge.render.text_renderer import is_video_overlay
+    assert all(is_video_overlay(f"a{e}") for e in (".gif", ".WEBM", ".mov")) and not is_video_overlay("a.png")

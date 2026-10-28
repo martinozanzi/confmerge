@@ -22,7 +22,7 @@ def items(state, W: int, H: int) -> list[tuple[str, int, QRectF]]:
     out = []
     safe = spec.brand.safe
     for i, e in enumerate(spec.graphics.elements):
-        if "main" in e.targets and e.visible and e.kind in ("text", "image", "shape"):
+        if "main" in e.targets and e.visible and e.kind in ("text", "image", "clip", "shape"):
             r = anchors.resolve(substitute([e], spec.variables), W, H, safe)[0]
             out.append(("el", i, element_bbox(r, W, H)))
     for be in brand_elements(spec, W, H):

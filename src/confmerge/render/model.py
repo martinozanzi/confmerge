@@ -54,7 +54,7 @@ class Box:
 @dataclass
 class Element:
     id: str = ""
-    kind: str = "text"            # text | image | shape | bar
+    kind: str = "text"            # text | image | clip (video/GIF con sfondo trasparente) | shape | bar
     x: float = 0.5                # centro, frazione della larghezza
     y: float = 0.5                # centro, frazione dell'altezza
     rotation: float = 0.0
@@ -78,6 +78,7 @@ class Element:
     fit_width: float = 0.0         # 0 = nessun limite; altrimenti il testo si rimpicciolisce per stare in questa frazione della larghezza
     line_spacing: float = 1.0
     letter_spacing: float = 0.0   # frazione dell'altezza
+    loop: bool = True             # clip: si ripete finché l'elemento è visibile
     hl_word: int = -1             # sottotitoli: indice della parola evidenziata (-1 = nessuna)
     hl_color: str = "#FFE600"
     hl_scale: float = 1.0
