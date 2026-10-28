@@ -109,7 +109,7 @@ def test_social_flow_load_cut_export(win, clip):
     assert st.spec.image.reframe == "blur"
     assert look.player.canvas.safe_zones and look.player.canvas.safe_common != (0.0, 0.0, 0.0, 0.0)
     # esportazione di due versioni
-    win.social.show_step(3, animate=False)
+    win.social.show_step(7, animate=False)
     ex = win.social.export
     ex.refresh()
     st.spec.export.out_dir = str(clip.parent / "out")
@@ -161,3 +161,38 @@ def test_safe_zone_and_preview_paint(win, clip):
     assert not img.isNull()
     win.social.cut.wave.set_removed([(1.0, 2.0)])
     assert not win.social.cut.wave.grab().isNull()
+
+
+def test_social_steps_clickable_and_silence_revert(win, clip):
+    st = win.social_state
+    sh = win.social
+    assert sh.steps.reach == 0
+    sh.steps.clicked.emit(3)                                              # senza video non si va da nessuna parte
+    assert sh.step == 0
+    sh.start.start([clip])
+    assert wait(lambda: st.project is not None and sh.step == 1), "caricamento non riuscito"
+    assert sh.steps.reach == 7
+    for i, panel in ((2, 0), (3, 1), (4, 2), (5, 3), (6, 4)):             # Formato, Due video, Grafica, Sottotitoli, Audio
+        sh.steps.clicked.emit(i)
+        assert sh.step == i and sh.stack.currentWidget() is sh.look and sh.look.panels.currentIndex() == panel
+    sh.steps.clicked.emit(7)
+    assert sh.stack.currentWidget() is sh.export
+    sh.steps.clicked.emit(1)
+    assert sh.stack.currentWidget() is sh.cut
+    # togli i silenzi → rimetti i silenzi (i tagli fatti a mano restano)
+    cut, pr = sh.cut, st.project
+    st.social.remove(0.0, 0.5)                                            # taglio a mano
+    manual = [list(k) for k in pr.keep]
+    cut.refresh()
+    assert cut.sil_btn.isVisibleTo(cut) and not cut.unsil_btn.isVisibleTo(cut)
+    cut.remove_silences()
+    assert len(pr.keep) == 2 and st.social.kept_seconds() < 6.5
+    assert cut.unsil_btn.isVisibleTo(cut) and not cut.sil_btn.isVisibleTo(cut)
+    cut.restore_silences()
+    assert pr.keep == manual and not st.social.silence_removed
+    assert cut.sil_btn.isVisibleTo(cut)
+    # il tasto Avanti in alto porta al passo successivo e l'ultimo diventa «Esporta»
+    sh.show_step(6)
+    assert sh.next.text() == "Esporta"
+    sh.next.click()
+    assert sh.step == 7 and not sh.next.isVisibleTo(sh)

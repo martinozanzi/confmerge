@@ -265,7 +265,7 @@ class SubtitlesTab(QWidget):
             Path(path).write_text(S.to_srt(self.sub(), st.ranges()), encoding="utf-8")
 
 
-def SimpleSubtitlesCard(state, open_settings=None, parent=None):
+def SimpleSubtitlesCard(state, open_settings=None, parent=None, wide: bool = False):
     """Scheda dei sottotitoli per Semplice e Studio Social (vedi subtitle_card.py)."""
     from .subtitle_card import SubtitleCard
-    return SubtitleCard(state, open_settings, parent)
+    return SubtitleCard(state, open_settings, parent, wide)

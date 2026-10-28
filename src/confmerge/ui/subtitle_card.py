@@ -13,59 +13,72 @@ SAMPLE_SECONDS = 4.0
 
 
 class SubtitleCard(Card):
-    def __init__(self, state, open_settings=None, parent=None):
+    def __init__(self, state, open_settings=None, parent=None, wide: bool = False):
+        """`wide`: due colonne (Crea | Aspetto), per le pagine senza scorrimento di Studio Social."""
         super().__init__(parent)
-        self.state, self.open_settings = state, open_settings
+        self.state, self.open_settings, self.wide = state, open_settings, wide
         self.ctl = state.subtitles
+        self._cols = (QVBoxLayout(), QVBoxLayout())
+        if wide:
+            self._cols[0].setSpacing(6)
+            self._cols[1].setSpacing(6)
+        c = 0
         self.add(label("Sottotitoli", "h2", True))
+        if wide:
+            hh = QHBoxLayout()
+            hh.setSpacing(18)
+            hh.addLayout(self._cols[0], 1)
+            hh.addLayout(self._cols[1], 1)
+            self.lay.addLayout(hh)
         self.status = label("", "caption", True)
-        self.add(self.status)
+        self._put(self.status, c)
         self.on = Toggle("Mostra i sottotitoli nel video")
         self.on.toggled.connect(self._toggled)
-        self.add(self.on)
-        self.add(label("Finché non li crei, nell'anteprima vedi una frase di esempio con lo stile che scegli.", "caption", True))
+        self._put(self.on, c)
+        self._put(label("Finché non li crei, nell'anteprima vedi una frase di esempio con lo stile che scegli.", "caption", True), c)
+        # lingue: del video e dei sottotitoli (se diversa, si traduce)
+        from ..transcribe import LANGS
+        self._put(label("Lingua parlata nel video", ""), c)
+        self.src = QComboBox()
+        self.src.addItem("Riconosci da sola", "")
+        for code, nm in LANGS:
+            self.src.addItem(nm, code)
+        self.src.currentIndexChanged.connect(self._langs)
+        self._put(self.src, c)
+        self._put(label("Lingua dei sottotitoli", ""), c)
+        self.out = QComboBox()
+        self.out.addItem("La stessa del video", "")
+        for code, nm in LANGS:
+            self.out.addItem(nm, code)
+        self.out.setToolTip("Se scegli un'altra lingua, i sottotitoli vengono tradotti (costo trascurabile)")
+        self.out.currentIndexChanged.connect(self._langs)
+        self._put(self.out, c)
+        # come compaiono
+        self._put(label("Parole per volta", ""), c)
+        self.chunk = QComboBox()
+        for k, v in S.CHUNKS.items():
+            self.chunk.addItem(v, k)
+        self.chunk.currentIndexChanged.connect(self._chunk)
+        self._put(self.chunk, c)
+        self._put(label("Animazione", ""), c)
+        self.anim = QComboBox()
+        for k, v in S.ANIMS.items():
+            self.anim.addItem(v, k)
+        self.anim.currentIndexChanged.connect(self._anim)
+        self._put(self.anim, c)
+        # aspetto: stile pronto, carattere e colori
+        c = 1
         self.style = QComboBox()
         self.style.addItem("Stile pronto: scegli…", "")
         for n in S.PRESETS:
             self.style.addItem(n, n)
         self.style.currentIndexChanged.connect(self._preset)
-        self.add(self.style)
-        # lingue: del video e dei sottotitoli (se diversa, si traduce)
-        from ..transcribe import LANGS
-        self.add(label("Lingua parlata nel video", ""))
-        self.src = QComboBox()
-        self.src.addItem("Riconosci da sola", "")
-        for c, n in LANGS:
-            self.src.addItem(n, c)
-        self.src.currentIndexChanged.connect(self._langs)
-        self.add(self.src)
-        self.add(label("Lingua dei sottotitoli", ""))
-        self.out = QComboBox()
-        self.out.addItem("La stessa del video", "")
-        for c, n in LANGS:
-            self.out.addItem(n, c)
-        self.out.setToolTip("Se scegli un'altra lingua, i sottotitoli vengono tradotti (costo trascurabile)")
-        self.out.currentIndexChanged.connect(self._langs)
-        self.add(self.out)
-        # come compaiono
-        self.add(label("Parole per volta", ""))
-        self.chunk = QComboBox()
-        for k, v in S.CHUNKS.items():
-            self.chunk.addItem(v, k)
-        self.chunk.currentIndexChanged.connect(self._chunk)
-        self.add(self.chunk)
-        self.add(label("Animazione", ""))
-        self.anim = QComboBox()
-        for k, v in S.ANIMS.items():
-            self.anim.addItem(v, k)
-        self.anim.currentIndexChanged.connect(self._anim)
-        self.add(self.anim)
-        # aspetto: carattere e colori
+        self._put(self.style, c)
         from PySide6.QtWidgets import QFontComboBox, QLabel, QWidget
-        self.add(label("Carattere", ""))
+        self._put(label("Carattere", ""), c)
         self.font = QFontComboBox()
         self.font.currentFontChanged.connect(self._font)
-        self.add(self.font)
+        self._put(self.font, c)
         self.colors = QWidget()
         cl = QHBoxLayout(self.colors)
         cl.setContentsMargins(0, 0, 0, 0)
@@ -78,31 +91,32 @@ class SubtitleCard(Card):
             col.addWidget(btn)
             cl.addLayout(col)
         cl.addStretch(1)
-        self.add(self.colors)
+        self._put(self.colors, c)
         self.out_lbl = label("", "", True)
-        self.add(self.out_lbl)
+        self._put(self.out_lbl, c)
         self.outline = QSlider(Qt.Horizontal)
         self.outline.setRange(0, 15)                        # spessore del bordo: 0 … 1,5 % dell'altezza
         self.outline.valueChanged.connect(self._outline)
-        self.add(self.outline)
+        self._put(self.outline, c)
         # grandezza
         self.size_lbl = label("", "", True)
-        self.add(self.size_lbl)
+        self._put(self.size_lbl, c)
         self.size = QSlider(Qt.Horizontal)
         self.size.setRange(20, 140)                         # decimi di punto percentuale: 2,0 % … 14,0 % dell'altezza
         self.size.valueChanged.connect(self._size)
-        self.add(self.size)
+        self._put(self.size, c)
         # posizione
-        self.add(label("Posizione", ""))
+        self._put(label("Posizione", ""), c)
         self.pos = Segmented([("In basso", "bottom"), ("Al centro", "middle"), ("In alto", "top")])
         self.pos.changed.connect(self._pos)
-        self.add(self.pos)
+        self._put(self.pos, c)
         self.margin_lbl = label("", "", True)
-        self.add(self.margin_lbl)
+        self._put(self.margin_lbl, c)
         self.margin = QSlider(Qt.Horizontal)
         self.margin.setRange(0, 350)
         self.margin.valueChanged.connect(self._margin)
-        self.add(self.margin)
+        self._put(self.margin, c)
+        c = 0
         row = QHBoxLayout()
         self.make = PrimaryButton("Crea i sottotitoli", "sparkles")
         self.make.clicked.connect(self._create)
@@ -114,12 +128,12 @@ class SubtitleCard(Card):
         for b in (self.make, self.cancel, self.keybtn):
             row.addWidget(b)
         row.addStretch(1)
-        self.lay.addLayout(row)
+        self._put_layout(row, c)
         self.bar = ProgressBarThin()
         self.bar.setVisible(False)
-        self.add(self.bar)
+        self._put(self.bar, c)
         self.msg = label("", "caption", True)
-        self.add(self.msg)
+        self._put(self.msg, c)
         self.ctl.progress.connect(lambda f, m: (self.bar.setValue(f), self.msg.setText(m)))
         self.ctl.finished.connect(lambda n: self._done(f"Fatto: {n} righe." if n else "Non ho trovato parlato da trascrivere."))
         self.ctl.failed.connect(self._done)
@@ -128,6 +142,12 @@ class SubtitleCard(Card):
         state.profile_changed.connect(self.refresh)
         state.keys_changed.connect(self.refresh)            # chiave salvata nelle Impostazioni: si aggiorna da sola
         self.refresh()
+
+    def _put(self, w, c: int = 0) -> None:
+        (self._cols[c] if self.wide else self.lay).addWidget(w)
+
+    def _put_layout(self, lo, c: int = 0) -> None:
+        (self._cols[c] if self.wide else self.lay).addLayout(lo)
 
     def showEvent(self, e):
         super().showEvent(e)

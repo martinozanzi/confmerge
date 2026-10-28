@@ -69,14 +69,15 @@ def test_simple_flow_to_exported_video(app_window, media, tmp_path):
     wait(app, lambda: st.project is not None and s.step == 1)
     pr = st.project
     assert pr.offset_s == pytest.approx(1.5, abs=0.01)
+    s.show_step(2)                                                           # «Inizio e fine»
     assert not s.next.isEnabled() and "conferma" in s.hint.text()           # il taglio va confermato in modo esplicito
     assert pr.trim_start is None
     st.review.apply_suggestion()
     assert pr.trim_confirmed and s.next.isEnabled()
     # testi variabili del profilo
     st.spec.variables.update({"titolo": "Convegno di prova", "relatore": "Mario Rossi", "ruolo": "Sindaco"})
-    s.go_next()
-    assert s.step == 2
+    s.show_step(6)
+    assert s.step == 6
     s.export._choose("fast")                                                 # «Più veloce»
     st.spec.graphics.title.duration = 1.5
     st.spec.credit.duration = 2.0
@@ -191,12 +192,16 @@ def test_steps_are_clickable_and_locked_until_ready(app_window, media):
     assert s.steps.reach == 0
     w.open_sources([media])
     wait(app, lambda: st.project is not None and s.step == 1)
-    assert s.steps.reach == 1                                              # Esporta ancora bloccato: manca la conferma
-    s.steps.clicked.emit(2)
-    assert s.step == 1
-    st.review.apply_suggestion()
-    assert s.steps.reach == 2
+    assert s.steps.reach == 2                                              # Titoli… Esporta bloccati: manca la conferma
     s.steps.clicked.emit(2)
     assert s.step == 2
+    s.steps.clicked.emit(6)
+    assert s.step == 2                                                     # resta su «Inizio e fine»
+    st.review.apply_suggestion()
+    assert s.steps.reach == 6
+    for i in (3, 4, 5, 6):
+        s.steps.clicked.emit(i)
+        assert s.step == i
+    assert s.check.panels.currentIndex() == 4 or s.step == 6               # (5 = Audio → pannello 4)
     s.steps.clicked.emit(0)                                                # tornare indietro è sempre possibile
     assert s.step == 0

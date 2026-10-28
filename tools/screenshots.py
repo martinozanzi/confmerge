@@ -46,6 +46,7 @@ def make_media(d: pathlib.Path) -> None:
 
 def find_problems(root: QWidget, tag: str) -> list[dict]:
     out = []
+    vertical = tag[:1] in ("s", "o", "h")         # Semplice, Social, scelta iniziale; l'Avanzata ha molte opzioni e può scorrere
     skip_parent = (QSplitter, QStackedWidget, QTabBar, QAbstractScrollArea, QScrollBar)
     for w in root.findChildren(QWidget):
         if not w.isVisible() or w.property("overlay"):
@@ -60,6 +61,11 @@ def find_problems(root: QWidget, tag: str) -> list[dict]:
                         "eccesso": w.horizontalScrollBar().maximum(),
                         "contenuto": type(inner).__name__ if inner else "", "visibile": w.viewport().width(),
                         "minimo-contenuto": inner.minimumSizeHint().width() if inner else 0})
+        # scorrimento verticale: nelle schermate guidate (Semplice, Social) niente deve scorrere su un portatile 1366×768
+        if (vertical and type(w).__name__ in ("QScrollArea", "_Scroll") and w.verticalScrollBar().isVisible()
+                and w.verticalScrollBar().maximum() > 4):
+            out.append({"tag": tag, "kind": "scorrimento-verticale", "widget": name, "eccesso": w.verticalScrollBar().maximum(),
+                        "visibile": w.viewport().height()})
         # testo tagliato
         if isinstance(w, QLabel) and w.hasScaledContents():
             continue      # immagine che si adatta al riquadro: non si taglia
@@ -119,7 +125,7 @@ def main():
     make_media(media)
     sst = AppState(st.settings, kind="social")
     w = MainWindow(st, sst)
-    w.resize(*((1100, 700) if use_min else (1360, 860)))
+    w.resize(*((1100, 700) if use_min else (1280, 700)))                 # portatile 1366×768: finestra utile ≈ 1280×700
     w.show()
     problems: list[dict] = []
     shots: list[str] = []
@@ -207,30 +213,26 @@ def main():
     w.social.cut._sel_changed((6.0, 9.0))
     pump(app, 10)
     snap("o1-taglia-tagliato")
-    w.social.show_step(2, animate=False)
     sst.spec.social.platforms = ["shorts", "reels", "youtube"]
-    w.social.look.sync()
     sst.spec.subtitles.enabled = True
     from confmerge.ui.social_style import new_text
     sst.spec.graphics.elements.append(new_text(sst, "tc"))
     sst.spec.graphics.elements[-1].text = "Assemblea cittadina"
+    sst.spec.split.path = str(media / "v1.mp4")
     sst.touch()
-    w.social.look.sync()
-    w.social.look.safe.setChecked(True)
-    pump(app, 30)
-    snap("o2-aspetto")
-    from PySide6.QtWidgets import QScrollArea
-    for k, sa in enumerate(w.social.look.findChildren(QScrollArea)[:1]):
-        sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum() // 2)
-    pump(app, 10)
-    snap("o2-aspetto-meta")
-    for sa in w.social.look.findChildren(QScrollArea)[:1]:
-        sa.verticalScrollBar().setValue(sa.verticalScrollBar().maximum())
-    pump(app, 10)
-    snap("o2-aspetto-fondo")
-    for sa in w.social.look.findChildren(QScrollArea)[:1]:
-        sa.verticalScrollBar().setValue(0)
-    w.social.show_step(3, animate=False)
+    for step, name in ((2, "o2-formato"), (3, "o2-due-video"), (4, "o2-grafica"), (5, "o2-sottotitoli"), (6, "o2-audio")):
+        w.social.show_step(step, animate=False)
+        w.social.look.sync()
+        if step == 2:
+            w.social.look.safe.setChecked(True)
+        if step == 3:
+            sst.spec.split.enabled = True               # il pannello si vede anche con il secondo video acceso (è il più alto)
+            sst.touch()
+            sst.profile_changed.emit()
+        pump(app, 25)
+        snap(name)
+    sst.spec.split.enabled = False
+    w.social.show_step(7, animate=False)
     pump(app, 10)
     snap("o3-esporta")
 
@@ -255,10 +257,10 @@ def main():
         sst.kits.add_logo(k, f, name, "main" if name == "Logo" else "symbol")
     brand.apply_kit(sst.spec, sst.kits.get(k.id), sst.kits)
     sst.touch()
-    w.social.show_step(2, animate=False)
+    w.social.show_step(4, animate=False)
     w.social.look.sync()
     pump(app, 20)
-    snap("o2-aspetto-marchio")
+    snap("o2-grafica-marchio")
 
     def snap_dialog(dlg, name):
         dlg.show()

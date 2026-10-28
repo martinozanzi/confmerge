@@ -20,6 +20,7 @@ class SocialController(QObject):
         super().__init__()
         self.state = state
         self.worker: Worker | None = None
+        self.silence_removed: list[tuple[float, float]] = []
 
     @property
     def running(self) -> bool:
@@ -105,6 +106,7 @@ class SocialController(QObject):
             self._set_keep(cuts.restore_range(pr.keep, pr.total_duration, a, b))
 
     def reset(self) -> None:
+        self.silence_removed = []
         if self.state.project and self.state.project.keep:
             self._set_keep([])
 
@@ -126,7 +128,20 @@ class SocialController(QObject):
         if not pr or not found:
             return 0, 0.0
         removed = cuts.removed_from_keep(pr.total_duration, pr.keep) + found
+        self.silence_removed = list(found)                   # si ricordano: «Rimetti i silenzi» riporta solo questi
         self._set_keep(cuts.keep_from_removed(pr.total_duration, cuts._merge(removed)))
         n, secs = len(found), sum(b - a for a, b in found)
         self.silencesFound.emit(n, secs)
         return n, secs
+
+    def restore_silences(self) -> int:
+        """Rimette le pause tolte con «Togli i silenzi», lasciando i tagli fatti a mano. Restituisce quante."""
+        pr = self.state.project
+        if not pr or not self.silence_removed:
+            return 0
+        keep = pr.keep
+        for a, b in self.silence_removed:
+            keep = cuts.restore_range(keep, pr.total_duration, a, b)
+        n, self.silence_removed = len(self.silence_removed), []
+        self._set_keep(keep)
+        return n
