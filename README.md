@@ -36,7 +36,10 @@ Studio Social usa l'audio delle clip (non quello esterno) ed è guidato in quatt
    di esempio con lo stile scelto. **Testi e immagini sul video** si aggiungono con un clic e si ancorano a un angolo o a un lato.
    Testi, logo e sottotitoli si **trascinano direttamente sull'anteprima**: si agganciano al centro, ai terzi e ai bordi della zona
    sicura (tieni premuto Alt per muoverli liberamente), anche in orizzontale; i pulsanti **Centra ↔ / ↕** li mettono al centro dell'**area
-   sicura** (la linea verde) oppure di tutto il video. Ogni testo ha **Aspetto…** con carattere, colori, contorno, ombra, sfondo e animazione.
+   sicura** (la linea verde) oppure di tutto il video. Come in CapCut, l'elemento scelto ha **8 maniglie** per ingrandirlo e rimpicciolirlo
+   (con aggancio alle guide; Alt = libero, Maiusc = proporzioni libere per le forme), pulsanti per **allineare** a sinistra/centro/destra e
+   in alto/metà/basso, **Ripristina**, frecce della tastiera (1 px, con Maiusc 10 px) e **Canc** per toglierlo; anche il bordo fra i due video
+   si trascina per cambiare l'altezza dei riquadri e dentro il secondo video si sposta l'inquadratura. Ogni testo ha **Aspetto…** con carattere, colori, contorno, ombra, sfondo e animazione.
    I **sottotitoli** hanno la lingua del video e quella dei sottotitoli (se diversa si traducono con Groq), «parole per volta» (2-3 come
    nei reel) e un'animazione d'entrata (dissolvenza, pop o **parola evidenziata**: quella che si sta dicendo si colora e si ingrandisce);
    gli stili **Reel a blocchi** e **Parola evidenziata** le mettono insieme. Si scelgono anche carattere, colore del testo, del bordo (con spessore) e
