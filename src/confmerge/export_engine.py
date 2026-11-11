@@ -144,7 +144,7 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
 
 
 def render_sample(p: Project, clips: list[MediaInfo], spec: RenderSpec, start: float, dur: float, out: Path,
-                  cancel: threading.Event | None = None) -> tuple[float, float, int]:
+                  cancel: threading.Event | None = None, background: bool = False) -> tuple[float, float, int]:
     """Codifica un campione con gli STESSI filtri/encoder dell'export. Restituisce (secondi reali, velocità×, byte).
     Serve sia alla stima sia all'anteprima di 10 s."""
     t0 = max(0.0, min(start, p.total_duration - dur))
@@ -163,13 +163,13 @@ def render_sample(p: Project, clips: list[MediaInfo], spec: RenderSpec, start: f
         res = graph.build(p, clips, s2, out, t0, t1, workdir, with_scenes=False, encoder=enc, slide_images=slides_imgs,
                           ranges=rng)
         try:
-            run_ffmpeg(res.args, res.duration, None, cancel)
+            run_ffmpeg(res.args, res.duration, None, cancel, background=background)
         except FFmpegError:
             if enc == "libx264":
                 raise
             res = graph.build(p, clips, s2, out, t0, t1, workdir, with_scenes=False, encoder="libx264",
                               slide_images=slides_imgs, ranges=rng)
-            run_ffmpeg(res.args, res.duration, None, cancel)
+            run_ffmpeg(res.args, res.duration, None, cancel, background=background)
         wall = max(time.time() - t_start, 1e-3)
         return wall, (t1 - t0) / wall, out.stat().st_size
     finally:

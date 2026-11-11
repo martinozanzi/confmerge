@@ -123,6 +123,9 @@ class AdvancedShell(QWidget):
     def goto(self, i: int, animate: bool = True) -> None:
         if i > 0 and not self.state.project:
             i = 0
+        self.review.player.player.pause()                    # cambiando fase il video si ferma
+        if i != 1:
+            self.state.review.cancel_background()            # e si fermano le anteprime in preparazione
         self.stack.setCurrentIndex(i)
         self.nav.set_current(i)
         self.visited.add(i)

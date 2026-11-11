@@ -291,6 +291,7 @@ class ExportPage(QWidget):
     def hideEvent(self, e):
         super().hideEvent(e)
         self.ctl.active = False
+        self.ctl.cancel_estimate()
 
     def set_available_width(self, w: int) -> None:
         """Chiamata dal contenitore con scroll: sotto ~1020 px le due colonne vanno una sotto l'altra."""

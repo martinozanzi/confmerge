@@ -18,6 +18,13 @@ from . import paths
 log = logging.getLogger(__name__)
 
 _CREATIONFLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0) if sys.platform == "win32" else 0
+_BELOW_NORMAL = 0x00004000 if sys.platform == "win32" else 0        # BELOW_NORMAL_PRIORITY_CLASS
+
+
+def background_threads() -> int:
+    """Quanti thread lasciare a un lavoro in secondo piano: metà dei processori, così il programma resta fluido."""
+    import os
+    return max(1, (os.cpu_count() or 2) // 2)
 
 
 class FFmpegError(RuntimeError):
@@ -99,13 +106,22 @@ def run_ffmpeg(
     total_duration: float | None = None,
     on_progress: Callable[[float, float | None], None] | None = None,
     cancel: threading.Event | None = None,
+    background: bool = False,
 ) -> None:
-    """Esegue ffmpeg. `on_progress(frazione, velocità_x)`; solleva Cancelled/FFmpegError."""
+    """Esegue ffmpeg. `on_progress(frazione, velocità_x)`; solleva Cancelled/FFmpegError.
+    `background`: lavoro in secondo piano (anteprime, stime): priorità bassa, così il resto del programma e del computer non rallenta."""
     cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-y", "-progress", "pipe:1", "-nostats", *map(str, args)]
     log.info("ffmpeg: %s", " ".join(cmd))
+    extra: dict = {}
+    if background:
+        if sys.platform == "win32":
+            extra["creationflags"] = _CREATIONFLAGS | _BELOW_NORMAL
+        else:
+            import os
+            extra["preexec_fn"] = lambda: os.nice(10)
     proc = subprocess.Popen(
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-        errors="replace", creationflags=_CREATIONFLAGS,
+        errors="replace", **{"creationflags": _CREATIONFLAGS, **extra},
     )
     tail: deque[str] = deque(maxlen=40)
 

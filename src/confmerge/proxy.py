@@ -12,14 +12,35 @@ from .pipeline import audio_filter, plan_segments
 from .project import Project
 
 PROXY_H = 360              # più piccolo = anteprima più rapida da preparare
-WINDOW_S = 600.0           # anteprima iniziale: 10 minuti da quando inizia l'audio
-NEAR_S = 180.0             # finestra preparata quando si salta in un altro punto
+WINDOW_S = 240.0           # anteprima iniziale: 4 minuti da quando inizia l'audio
+NEAR_S = 60.0              # finestra preparata quando si salta in un altro punto (si adatta alla velocità del computer)
+MIN_H, MIN_NEAR_S = 180, 20.0
+
+# Qualità che si adatta da sola: se una finestra si prepara più lentamente di quanto dura, la prossima è più piccola e più corta.
+_quality = {"h": PROXY_H, "near": NEAR_S}
+
+
+def adapt_quality(speed: float) -> None:
+    """`speed` = secondi di video preparati per secondo reale dell'ultima finestra."""
+    h, near = _quality["h"], _quality["near"]
+    if speed < 2.5:                                   # troppo lento per saltare «al volo»: meno pixel e finestra più corta
+        h = max(MIN_H, int(h * 0.75) // 2 * 2)
+        near = max(MIN_NEAR_S, near * 0.6)
+    elif speed > 10 and (h < PROXY_H or near < NEAR_S):   # il computer ce la fa con facilità: si torna su
+        h = min(PROXY_H, int(h * 1.25) // 2 * 2)
+        near = min(NEAR_S, near * 1.4)
+    _quality["h"], _quality["near"] = h, near
+
+
+def reset_quality() -> None:
+    _quality["h"], _quality["near"] = PROXY_H, NEAR_S
 
 
 def proxy_size(clips: list[MediaInfo]) -> tuple[int, int]:
     ref = clips[0]
-    w = round(PROXY_H * ref.width / max(ref.height, 1) / 2) * 2
-    return max(2, w), PROXY_H
+    h = _quality["h"]
+    w = round(h * ref.width / max(ref.height, 1) / 2) * 2
+    return max(2, w), h
 
 
 def audio_start(p: Project) -> float:
@@ -33,14 +54,18 @@ def initial_window(p: Project) -> tuple[float, float]:
 
 
 def window_around(p: Project, t: float) -> tuple[float, float]:
-    a = max(0.0, min(t - 20.0, p.total_duration - NEAR_S))
-    return a, min(p.total_duration, a + NEAR_S)
+    near = _quality["near"]
+    a = max(0.0, min(t - near / 4, p.total_duration - near))
+    return a, min(p.total_duration, a + near)
 
 
 def build_window(p: Project, clips: list[MediaInfo], a: float, b: float, out: Path,
                  on_progress: Callable[[float, float | None], None] | None = None,
                  cancel: threading.Event | None = None) -> Path:
     """Anteprima a bassa risoluzione dell'intervallo [a, b] della linea temporale, con l'audio registrato già allineato."""
+    import time
+    from .ffmpeg_wrapper import background_threads
+    t_start = time.time()
     segs = plan_segments(clips, a, b)
     if not segs:
         raise ValueError("Intervallo di anteprima vuoto")
@@ -56,8 +81,9 @@ def build_window(p: Project, clips: list[MediaInfo], a: float, b: float, out: Pa
     ch.append(f"[{n}:a:0]{audio_filter(p, a)},atrim=end={b - a:.3f},asetpts=PTS-STARTPTS,aformat=channel_layouts=stereo[a]")
     args += ["-filter_complex", ";".join(ch), "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "ultrafast",
              "-tune", "fastdecode", "-crf", "30", "-pix_fmt", "yuv420p", "-g", "25", "-c:a", "aac", "-b:a", "96k",
-             "-t", f"{b - a:.3f}", "-movflags", "+faststart", str(out)]
-    run_ffmpeg(args, b - a, on_progress, cancel)
+             "-t", f"{b - a:.3f}", "-threads", str(background_threads()), "-movflags", "+faststart", str(out)]
+    run_ffmpeg(args, b - a, on_progress, cancel, background=True)
+    adapt_quality((b - a) / max(time.time() - t_start, 1e-3))
     return out
 
 

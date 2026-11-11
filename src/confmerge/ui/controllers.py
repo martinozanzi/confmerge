@@ -328,6 +328,13 @@ class ReviewController(QObject):
         self.message.emit("Sto preparando l'anteprima di questo punto: ci vuole qualche secondo…")
         self._queue(("window", a, b, t))
 
+    def cancel_background(self) -> None:
+        """Si esce dalla schermata: si fermano le anteprime in preparazione (consumano processore per niente)."""
+        self._queued = None
+        self._offset_timer.stop()
+        if self.worker and self.worker.isRunning():
+            self.worker.cancel()
+
     def apply_offset(self, pos: float) -> None:
         st = self.state
         if not st.proxy or not st.project:
@@ -493,6 +500,13 @@ class ExportController(QObject):
 
     def trim_range(self) -> tuple[float, float]:
         return self.state.trim_start, self.state.trim_end
+
+    def cancel_estimate(self) -> None:
+        """Si esce dalla pagina Esporta: la stima in corso (una codifica di prova) si ferma."""
+        self._dirty = False
+        self._debounce.stop()
+        if self.est_worker and self.est_worker.isRunning():
+            self.est_worker.cancel()
 
     def run_estimate(self) -> None:
         st = self.state
