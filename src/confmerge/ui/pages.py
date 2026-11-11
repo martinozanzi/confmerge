@@ -160,7 +160,7 @@ class SelectPage(QWidget):
         for line in source_lines(m):
             self.list.addItem(line)
         parts = [f"<b>{len(m.videos)}</b> video"]
-        parts.append(f"audio registrato: <b>{m.audio.name}</b>" if m.audio else "<b>audio registrato mancante</b>")
+        parts.append(f"audio registrato: <b>{m.audio_label}</b>" if m.audio else "<b>audio registrato mancante</b>")
         if m.slides:
             parts.append(f"<b>{len(m.slides)}</b> file di slide")
         txt = "Riepilogo: " + " · ".join(parts)
@@ -205,7 +205,7 @@ class AnalysisPage(QWidget):
         m = self.state.sources
         self.bar.setValue(0)
         self.msg.setText("Guardo i video…")
-        self.runner.start(list(m.videos), m.audio, list(m.slides))
+        self.runner.start(list(m.videos), m.audio_for_analysis(), list(m.slides))
 
 
 from .review_page import ReviewPage  # noqa: E402,F401  (schermata «Controlla», in un file a parte)

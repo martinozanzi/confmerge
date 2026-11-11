@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 
 from . import __version__, paths
+from .audio_parts import audio_parts
 from .ffmpeg_wrapper import Cancelled, FFmpegError
 from .media_scan import media_info, pick_external_audio, scan_folder
 from .pipeline import AnalysisReport, analyze, export
@@ -33,12 +34,13 @@ def _progress(msg: str, frac: float) -> None:
         print()
 
 
-def _inputs_from_args(args) -> tuple[list[Path], Path]:
+def _inputs_from_args(args) -> tuple[list[Path], Path | list[Path]]:
     if args.input and Path(args.input[0]).is_dir():
         scan = scan_folder(args.input[0])
         if not scan.videos:
             raise FFmpegError("Nessun video MP4/MOV trovato nella cartella")
-        audio = Path(args.audio) if args.audio else pick_external_audio(scan.audios)
+        parts = audio_parts(scan.audios)                      # registrazione divisa in più file: si mettono a seguire
+        audio = Path(args.audio) if args.audio else (parts if len(parts) > 1 else pick_external_audio(scan.audios))
         if audio is None:
             raise FFmpegError("Nessun file audio esterno trovato nella cartella (usa --audio)")
         return scan.videos, audio

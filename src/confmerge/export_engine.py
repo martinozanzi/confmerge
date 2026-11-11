@@ -101,6 +101,8 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
                on_progress: Progress | None = None, cancel: threading.Event | None = None,
                force_mode: str | None = None) -> ExportReport:
     out = Path(out)
+    from .audio_parts import ensure_project_audio
+    ensure_project_audio(p, cancel)
     inputs = {Path(c).resolve() for c in p.clips} | ({Path(p.audio).resolve()} if p.audio else set())
     if out.resolve() in inputs:
         raise FFmpegError("Il file di uscita coincide con un file di input: gli originali non vengono mai modificati")

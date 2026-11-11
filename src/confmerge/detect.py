@@ -14,7 +14,8 @@ from .media_scan import AUDIO_EXT, SLIDE_EXT, VIDEO_EXT
 class Detection:
     kind: str                                   # "merge" | "social" | "" (niente di utilizzabile)
     videos: list[Path] = field(default_factory=list)
-    audio: Path | None = None
+    audio: Path | None = None                   # il primo file della registrazione audio
+    audios: list[Path] = field(default_factory=list)     # tutte le parti della registrazione, in ordine
     slides: list[Path] = field(default_factory=list)
     folder: Path | None = None
     reason: str = ""                            # frase per l'utente: perché è stato scelto
@@ -47,7 +48,10 @@ def classify(items) -> Detection:
     n = len(videos)
     quanti = "un video" if n == 1 else f"{n} video"
     if audios:
-        return Detection("merge", videos, audios[0], slides, folder, f"Ho trovato {quanti} e una registrazione audio: sembra una "
-                         "conferenza da unire e sincronizzare.", items)
-    return Detection("social", videos, None, slides, folder, f"Ho trovato {quanti} con {'il suo' if n == 1 else 'il loro'} audio: "
-                     "li preparo per i social. (Se hai anche una registrazione audio a parte, trascinala insieme ai video.)", items)
+        from .audio_parts import audio_parts
+        parts = audio_parts(audios)
+        rec = "una registrazione audio" if len(parts) < 2 else f"una registrazione audio divisa in {len(parts)} file"
+        return Detection("merge", videos, parts[0], parts, slides, folder, f"Ho trovato {quanti} e {rec}: sembra una conferenza "
+                         "da unire e sincronizzare.", items)
+    return Detection("social", videos, slides=slides, folder=folder, reason=f"Ho trovato {quanti} con {'il suo' if n == 1 else 'il loro'} audio: "
+                     "li preparo per i social. (Se hai anche una registrazione audio a parte, trascinala insieme ai video.)", sources=items)
