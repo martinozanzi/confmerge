@@ -12,7 +12,8 @@ FORMAT_VERSION = 1
 @dataclass
 class Project:
     clips: list[str] = field(default_factory=list)       # in ordine di montaggio
-    audio: str = ""
+    audio: str = ""                                      # il file audio da usare (se le parti sono più d'una: il file unito)
+    audios: list[str] = field(default_factory=list)      # le parti della registrazione, in ordine (vuoto = un solo file)
     total_duration: float = 0.0                          # durata del video unito
     offset_s: float = 0.0                                # esterno(t) ≈ camera(t + offset)
     sync_confidence: float = 0.0

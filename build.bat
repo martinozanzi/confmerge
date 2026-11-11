@@ -62,9 +62,8 @@ set COMMON=--noconfirm --clean --windowed --name ConfMerge --icon assets\icon.ic
  --add-data "THIRD-PARTY-NOTICES.txt;." --add-data "LICENSE;." --add-data "bin\ffmpeg-version.txt;bin" ^
  --exclude-module tkinter.test --exclude-module matplotlib --exclude-module PySide6.QtWebEngineCore
 
-rem splash: richiede tkinter (incluso nell'installer di python.org)
-set SPLASH=--splash assets\splash.png
-python -c "import tkinter" 2>nul || (set SPLASH= & echo ATTENZIONE: tkinter non disponibile - build senza splash screen.)
+rem niente splash di PyInstaller (compare sempre sullo schermo principale e grande): lo splash e' piccolo e lo apre l'app stessa
+set SPLASH=
 
 if /i "%TARGET%"=="onedir" goto onedir
 echo [4/5] Build onefile...

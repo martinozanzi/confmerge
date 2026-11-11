@@ -205,3 +205,22 @@ def test_steps_are_clickable_and_locked_until_ready(app_window, media):
     assert s.check.panels.currentIndex() == 4 or s.step == 6               # (5 = Audio → pannello 4)
     s.steps.clicked.emit(0)                                                # tornare indietro è sempre possibile
     assert s.step == 0
+
+
+def test_conference_with_audio_split_in_files_is_chained(app_window, media, tmp_path):
+    """Cartella con i video e la registrazione divisa in due file: si apre come conferenza, la sincronia è quella del primo."""
+    app, st, w = app_window
+    d = tmp_path / "split"
+    d.mkdir()
+    for n in ("v0.mp4", "v1.mp4"):
+        shutil.copy(media / n, d / n)
+    for i, (ss, t) in enumerate(((0, 25), (25, 40))):
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", str(ss), "-t", str(t), "-i", str(media / "rec.wav"),
+                        str(d / f"REC_{i + 1:03d}.wav")], check=True)
+    w.open_sources([d])
+    assert w.app == "merge"
+    wait(app, lambda: st.project is not None)
+    pr = st.project
+    assert pr.offset_s == pytest.approx(1.5, abs=0.02)
+    assert len(pr.audios) == 2 and pr.audio.endswith(".flac")
+    assert "2 parti" in w.simple.start.found.text() or "REC_001" in w.simple.start.found.text()

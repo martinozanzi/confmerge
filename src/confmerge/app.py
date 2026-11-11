@@ -24,6 +24,11 @@ def main() -> int:
     if "--selftest" in sys.argv[1:]:
         from . import selftest
         return selftest.run()
+    from .ui.splash import center_on_screen, cursor_screen, make_splash
+    screen = cursor_screen()                          # lo schermo dove l'utente ha il mouse: lì si apre tutto
+    splash = make_splash(__version__)
+    splash.show()
+    app.processEvents()
     from .ui.brand import app_icon
     app.setWindowIcon(app_icon())
     app.setApplicationName("ConfMerge")
@@ -35,8 +40,10 @@ def main() -> int:
     theme.apply(app)
     win = MainWindow(state)
     from .ui.theme import set_titlebar
+    center_on_screen(win, screen)
     win.show()
     set_titlebar(win, theme.t.name == "dark")
+    splash.finish(win)
     try:  # splash screen di PyInstaller (solo nel target onefile)
         import pyi_splash  # type: ignore
         pyi_splash.close()

@@ -39,10 +39,18 @@ def _check_cancel(cancel: threading.Event | None) -> None:
         raise Cancelled()
 
 
-def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noop,
+def analyze(video_paths: list[Path], audio_path: Path | list[Path], progress: Progress = _noop,
             cancel: threading.Event | None = None, keep_order: bool = False) -> AnalysisReport:
     if not video_paths:
         raise FFmpegError("Nessun video selezionato")
+    parts = [Path(p) for p in audio_path] if isinstance(audio_path, (list, tuple)) else [Path(audio_path)]
+    if len(parts) > 1:                                    # registrazione divisa in più file: si mettono a seguire in un solo file
+        from . import audio_parts
+        progress(f"Metto in fila le {len(parts)} parti della registrazione audio…", 0.0)
+        audio_path = audio_parts.ensure_merged(parts, audio_parts.merged_path(parts, paths.temp_dir()), cancel,
+                                               lambda f, s: progress(f"Metto in fila le parti dell'audio ({f * 100:.0f}%)…", f * 0.1))
+    else:
+        audio_path = parts[0]
     progress("Lettura dei metadati…", 0.0)
     infos = []
     for p in video_paths:
@@ -72,11 +80,12 @@ def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noo
 
     progress("Calcolo dell'offset di sincronizzazione…", 0.55)
     res = sync.analyze_sync(cam, ext, sr)
+    multi = len(parts) > 1                                # con più file la deriva non si può misurare (pause fra un file e l'altro)
     if res.low_confidence:
         warnings.append(
             f"Confidenza di sincronizzazione bassa ({res.confidence:.1f}): controlla l'offset a orecchio."
         )
-    if res.drift_significant:
+    if res.drift_significant and not multi:
         warnings.append(
             f"Deriva dei clock di {res.drift_s * 1000:+.0f} ms in {res.drift_span_s / 60:.0f} min: "
             f"consigliata la correzione (atempo={res.atempo:.6f})."
@@ -89,9 +98,9 @@ def analyze(video_paths: list[Path], audio_path: Path, progress: Progress = _noo
 
     proj = Project(
         clips=[str(c.path.resolve()) for c in ordered], audio=str(Path(audio_path).resolve()), total_duration=total,
-        offset_s=res.offset_s, sync_confidence=res.confidence, drift_s=res.drift_s,
-        atempo=res.atempo, offset_corrected_s=res.offset_corrected_s,
-        use_drift_correction=False,
+        offset_s=res.offset_s, sync_confidence=res.confidence, drift_s=None if multi else res.drift_s,
+        atempo=1.0 if multi else res.atempo, offset_corrected_s=None if multi else res.offset_corrected_s,
+        use_drift_correction=False, audios=[str(p.resolve()) for p in parts] if multi else [],
     )
     if sug.found:
         proj.suggested_start, proj.suggested_end = sug.start_s, sug.end_s
@@ -236,6 +245,8 @@ def export(p: Project, clips: list[MediaInfo], out: Path, mode: str = "auto",
            on_progress: Callable[[float, float | None], None] | None = None,
            cancel: threading.Event | None = None) -> ExportPlan:
     out = Path(out)
+    from .audio_parts import ensure_project_audio
+    ensure_project_audio(p, cancel)
     inputs = {Path(c).resolve() for c in p.clips} | {Path(p.audio).resolve()}
     if out.resolve() in inputs:
         raise FFmpegError("Il file di uscita coincide con un file di input: i video originali non vengono mai modificati")

@@ -182,7 +182,9 @@ class SimpleStart(QWidget):
     def begin(self):
         m = self.state.sources
         n = len(m.videos)
-        self.found.setText(f"Ho trovato {n} video e la registrazione «{m.audio.name}»."
+        audio_txt = m.audio_label if len(m.audio_parts) > 1 else f"«{m.audio.name}»"
+        self.found.setText(f"Ho trovato {n} video e la registrazione audio {audio_txt}."
+                           + (" Le parti dell'audio vengono messe a seguire; basta sincronizzare l'inizio del primo." if len(m.audio_parts) > 1 else "")
                            + (f" Ci sono anche {len(m.slides)} file di slide." if m.slides else ""))
         notes = [w for w in m.warnings() if "ordine" in w.lower() or "date" in w.lower()]
         self.order_note.setText(("⚠ " + notes[0] + " Se non è giusto, scegli «Più opzioni»." if notes else ""))
@@ -191,7 +193,7 @@ class SimpleStart(QWidget):
         self.msg.setText("Guardo i video…")
         self.stack.setCurrentIndex(1)
         self.started.emit()
-        self.runner.start(list(m.videos), m.audio, list(m.slides))
+        self.runner.start(list(m.videos), m.audio_for_analysis(), list(m.slides))
 
     def _progress(self, f: float, m: str):
         self.ring.setValue(f)

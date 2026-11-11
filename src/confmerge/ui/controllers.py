@@ -17,6 +17,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from .. import estimator, export_engine as ee, paths, pipeline, proxy
 from ..ffmpeg_wrapper import FFmpegError
+from ..audio_parts import audio_parts
 from ..media_scan import (AUDIO_EXT, SLIDE_EXT, VIDEO_EXT, MediaInfo, _natural_key, find_gaps, media_info, order_clips,
                           pick_external_audio, scan_folder)
 from ..queue import DONE, FAILED, QueueItem
@@ -53,7 +54,8 @@ class SourcesModel(QObject):
     def __init__(self):
         super().__init__()
         self.videos: list[Path] = []
-        self.audio: Path | None = None
+        self.audio: Path | None = None                  # il primo file (o l'unico) della registrazione audio
+        self.audio_parts: list[Path] = []               # tutte le parti, in ordine, se la registrazione è divisa in più file
         self.slides: list[Path] = []
         self.infos: list[MediaInfo] = []
         self.order_mode = "date"
@@ -67,13 +69,15 @@ class SourcesModel(QObject):
 
     def clear(self) -> None:
         self.videos, self.audio, self.slides, self.infos, self.notes, self.folder = [], None, [], [], [], None
+        self.audio_parts = []
         self.changed.emit()
 
     def load_folder(self, folder: Path) -> None:
         scan = scan_folder(folder)
         self.folder = Path(folder)
         self.videos = list(scan.videos)
-        self.audio = pick_external_audio(scan.audios)
+        self.audio_parts = audio_parts(scan.audios)
+        self.audio = self.audio_parts[0] if self.audio_parts else pick_external_audio(scan.audios)
         self.slides = list(scan.slides)
         self.order_mode = "date"
         self.refresh(reorder=True)
@@ -84,14 +88,18 @@ class SourcesModel(QObject):
             if p.is_dir():
                 self.load_folder(p)
                 return p
+        dropped_audio: list[Path] = []
         for p in items:
             ext = p.suffix.lower()
             if ext in VIDEO_EXT and p not in self.videos:
                 self.videos.append(p)
             elif ext in AUDIO_EXT:
-                self.audio = p
+                dropped_audio.append(p)
             elif ext in SLIDE_EXT:
                 self.slides.append(p)
+        if dropped_audio:
+            self.audio_parts = audio_parts(dropped_audio)
+            self.audio = self.audio_parts[0]
         self.refresh(reorder=True)
         return None
 
@@ -99,9 +107,22 @@ class SourcesModel(QObject):
         self.videos += [p for p in paths_ if p not in self.videos]
         self.refresh(reorder=True)
 
-    def set_audio(self, p: Path) -> None:
-        self.audio = p
+    def set_audio(self, p: Path | list[Path]) -> None:
+        parts = [Path(x) for x in p] if isinstance(p, (list, tuple)) else [Path(p)]
+        self.audio_parts = audio_parts(parts) if len(parts) > 1 else parts
+        self.audio = self.audio_parts[0] if self.audio_parts else None
         self.changed.emit()
+
+    @property
+    def audio_label(self) -> str:
+        """Per i messaggi: il nome del file, o «N file» se la registrazione è divisa in parti."""
+        if len(self.audio_parts) > 1:
+            return f"{len(self.audio_parts)} parti ({self.audio_parts[0].name} … {self.audio_parts[-1].name})"
+        return self.audio.name if self.audio else ""
+
+    def audio_for_analysis(self):
+        """Quello che si passa all'analisi: un file, o l'elenco delle parti."""
+        return list(self.audio_parts) if len(self.audio_parts) > 1 else self.audio
 
     def add_slides(self, paths_: list[Path]) -> None:
         self.slides += list(paths_)
@@ -182,7 +203,7 @@ class AnalysisRunner(QObject):
     def running(self) -> bool:
         return bool(self.worker and self.worker.isRunning())
 
-    def start(self, videos: list[Path], audio: Path, slides: list[Path]) -> None:
+    def start(self, videos: list[Path], audio: Path | list[Path], slides: list[Path]) -> None:
         paths.temp_dir()
 
         def job(cancel, report):
@@ -208,6 +229,11 @@ class AnalysisRunner(QObject):
 
         def job(cancel, report):
             clips = [media_info(c) for c in proj.clips]
+            if len(proj.audios) > 1:                       # registrazione in più parti: il file unito si rifà se non c'è più
+                from .. import audio_parts as ap
+                parts = [Path(a) for a in proj.audios]
+                report(0.1, "Metto in fila le parti dell'audio…")
+                proj.audio = str(ap.ensure_merged(parts, ap.merged_path(parts, paths.temp_dir()), cancel))
             report(0.2, "Leggo l'audio…")
             cam = [decode_audio_mono(c.path, 8000, c.duration) if c.has_audio else np.zeros(int(c.duration * 8000), np.float32)
                    for c in clips]
