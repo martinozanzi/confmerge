@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"      # include tkinter (serve allo splash screen)
+          python-version: "3.13"
 
       # build.bat usa un .venv già presente: lo creiamo noi con la versione scelta sopra
       - name: Ambiente virtuale

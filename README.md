@@ -21,6 +21,9 @@ Se la registrazione audio è **divisa in più file** (il registratore spezza i f
 riconosce dal nome, li mette a seguire nell'ordine giusto e sincronizza **solo l'inizio del primo**; con più file non si propone la correzione della
 deriva. Se in cartella ci sono altri audio con nomi diversi (una sigla) li ignora, e due formati dello stesso file (`voce.wav`, `voce.mp3`) valgono uno.
 
+All'avvio compare una piccola schermata (320×120) **sullo schermo dove hai il mouse**, e la finestra si apre sullo stesso schermo; non c'è più
+lo splash grande di PyInstaller, che compariva sempre sul monitor principale.
+
 ## Aggiornamenti e rilasci
 L'app controlla su GitHub se c'è una versione nuova (all'avvio, al massimo ogni 20 ore; si spegne da **Aiuto → Cerca gli aggiornamenti
 all'avvio**, o a mano da **Aiuto → Cerca aggiornamenti…**) e propone di scaricare `ConfMerge.exe` dalla release: viene letta solo la pagina pubblica,
