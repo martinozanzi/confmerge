@@ -21,8 +21,8 @@ Se la registrazione audio è **divisa in più file** (il registratore spezza i f
 riconosce dal nome, li mette a seguire nell'ordine giusto e sincronizza **solo l'inizio del primo**; con più file non si propone la correzione della
 deriva. Se in cartella ci sono altri audio con nomi diversi (una sigla) li ignora, e due formati dello stesso file (`voce.wav`, `voce.mp3`) valgono uno.
 
-All'avvio compare una piccola schermata (320×120) **sullo schermo dove hai il mouse**, e la finestra si apre sullo stesso schermo; non c'è più
-lo splash grande di PyInstaller, che compariva sempre sul monitor principale.
+All'avvio compare una piccola schermata (320×120) **sullo schermo dove hai il mouse** (non «sempre in primo piano»: altre app possono stare sopra), e la
+finestra si apre sullo stesso schermo; non c'è più lo splash grande di PyInstaller, che compariva sempre sul monitor principale.
 
 **Prestazioni.** Le anteprime in secondo piano girano a priorità bassa e con metà dei processori; saltando in un punto lontano si prepara una
 finestra breve (1 minuto) e, se il computer è lento, la qualità scende da sola (fino a 180 px) e torna su quando ce la fa. Cambiando passo il video
