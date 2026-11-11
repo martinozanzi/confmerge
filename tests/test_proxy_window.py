@@ -36,7 +36,7 @@ def test_initial_window_starts_at_audio_and_is_limited(rep):
     assert b == pytest.approx(r.project.total_duration)       # video più corto di 10 minuti: finisce col video
     r.project.total_duration = 3600.0
     a, b = proxy.initial_window(r.project)
-    assert b - a == pytest.approx(600.0)                      # 10 minuti da quando inizia l'audio
+    assert b - a == pytest.approx(proxy.WINDOW_S)             # la finestra iniziale ha una durata fissa dall'inizio dell'audio
     r.project.total_duration = 40.0
 
 
@@ -83,3 +83,42 @@ def test_player_coalesces_seeks_and_requests_windows(rep, qt_app, tmp_path, monk
     assert len(calls) == 1
     pl.set_position(30.0)                                     # fuori dall'anteprima
     assert needed and needed[-1] == pytest.approx(30.0)
+
+
+def test_quality_adapts_to_slow_machines_and_recovers(rep):
+    r, _, _ = rep
+    proxy.reset_quality()
+    h0, near0 = proxy._quality["h"], proxy._quality["near"]
+    proxy.adapt_quality(1.0)                                  # troppo lento: meno pixel e finestra più corta
+    assert proxy._quality["h"] < h0 and proxy._quality["near"] < near0
+    a, b = proxy.window_around(r.project, 20.0)
+    assert b - a <= proxy._quality["near"] + 1e-6
+    for _ in range(10):
+        proxy.adapt_quality(0.2)
+    assert proxy._quality["h"] >= proxy.MIN_H and proxy._quality["near"] >= proxy.MIN_NEAR_S      # mai sotto un minimo utilizzabile
+    for _ in range(20):
+        proxy.adapt_quality(30.0)                             # veloce: si torna alla qualità piena
+    assert proxy._quality["h"] == proxy.PROXY_H and proxy._quality["near"] == proxy.NEAR_S
+    assert proxy.proxy_size(r.clips)[1] == proxy.PROXY_H
+    proxy.reset_quality()
+
+
+def test_background_ffmpeg_runs_at_low_priority(tmp_path):
+    """Le anteprime in secondo piano hanno priorità bassa: non devono rallentare il programma."""
+    import subprocess as sp
+    import sys
+    from confmerge import ffmpeg_wrapper as fw
+    if sys.platform == "win32":
+        return
+    seen = {}
+    real = sp.Popen
+
+    def spy(*a, **kw):
+        seen["pre"] = kw.get("preexec_fn")
+        return real(*a, **kw)
+    fw.subprocess.Popen = spy
+    try:
+        fw.run_ffmpeg(["-f", "lavfi", "-i", "sine=f=440:d=0.2", str(tmp_path / "o.wav")], 0.2, background=True)
+    finally:
+        fw.subprocess.Popen = real
+    assert seen["pre"] is not None and fw.background_threads() >= 1

@@ -24,6 +24,10 @@ deriva. Se in cartella ci sono altri audio con nomi diversi (una sigla) li ignor
 All'avvio compare una piccola schermata (320×120) **sullo schermo dove hai il mouse**, e la finestra si apre sullo stesso schermo; non c'è più
 lo splash grande di PyInstaller, che compariva sempre sul monitor principale.
 
+**Prestazioni.** Le anteprime in secondo piano girano a priorità bassa e con metà dei processori; saltando in un punto lontano si prepara una
+finestra breve (1 minuto) e, se il computer è lento, la qualità scende da sola (fino a 180 px) e torna su quando ce la fa. Cambiando passo il video
+si ferma e si interrompono le anteprime e la stima dell'export, che altrimenti continuerebbero a consumare processore.
+
 ## Aggiornamenti e rilasci
 L'app controlla su GitHub se c'è una versione nuova (all'avvio, al massimo ogni 20 ore; si spegne da **Aiuto → Cerca gli aggiornamenti
 all'avvio**, o a mano da **Aiuto → Cerca aggiornamenti…**) e propone di scaricare `ConfMerge.exe` dalla release: viene letta solo la pagina pubblica,

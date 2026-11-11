@@ -224,3 +224,17 @@ def test_conference_with_audio_split_in_files_is_chained(app_window, media, tmp_
     assert pr.offset_s == pytest.approx(1.5, abs=0.02)
     assert len(pr.audios) == 2 and pr.audio.endswith(".flac")
     assert "2 parti" in w.simple.start.found.text() or "REC_001" in w.simple.start.found.text()
+
+
+def test_leaving_a_step_stops_playback_and_background_work(app_window):
+    app, st, w = app_window
+    calls = []
+    st.review.cancel_background = lambda: calls.append("bg")
+    paused = []
+    w.simple.check.player.player.pause = lambda: paused.append(1)
+    w.simple.show_step(0)
+    assert calls == ["bg"] and paused                                      # tornando a «Cartella» si ferma tutto
+    st.export.request_estimate()
+    assert st.export._debounce.isActive()
+    st.export.cancel_estimate()
+    assert not st.export._debounce.isActive() and not st.export._dirty     # la stima in attesa non parte più

@@ -604,6 +604,7 @@ class SimpleExport(QWidget):
     def hideEvent(self, e):
         super().hideEvent(e)
         self.ctl.active = False
+        self.ctl.cancel_estimate()                           # la stima è una codifica di prova: fuori da questa pagina si ferma
 
     def _est_started(self):
         q = self.ctl.quick_size()
@@ -768,6 +769,9 @@ class SimpleShell(QWidget):
             i = 0
         if i > 2 and not self._confirmed():                  # prima si conferma dove inizia e finisce
             i = 2
+        self.check.player.player.pause()                     # cambiando passo il video si ferma: niente audio né calcoli per niente
+        if i == 0 or i == EXPORT_STEP:
+            self.state.review.cancel_background()            # e si fermano le anteprime in preparazione
         self._step = i
         self.stack.setCurrentIndex(0 if i == 0 else 2 if i == EXPORT_STEP else 1)
         if 1 <= i < EXPORT_STEP:
