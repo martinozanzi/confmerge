@@ -1,4 +1,5 @@
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget
 
 
@@ -13,6 +14,7 @@ def test_splash_is_small_and_on_the_cursor_screen(qapp):
     scr = S.cursor_screen()
     assert sp.width() <= 400 and sp.height() <= 160                          # piccola: non nasconde lo schermo
     assert scr.geometry().contains(sp.frameGeometry().center())
+    assert not (sp.windowFlags() & Qt.WindowStaysOnTopHint)                  # altre finestre possono stare sopra
     sp.close()
 
 

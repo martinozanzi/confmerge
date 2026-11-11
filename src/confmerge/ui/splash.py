@@ -48,7 +48,7 @@ def make_splash(version: str = "") -> QSplashScreen:
     p.setPen(QColor("#6b7a8d"))
     p.drawText(22, SPLASH_H - 14, "Avvio…")
     p.end()
-    sp = QSplashScreen(px, Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.SplashScreen)
+    sp = QSplashScreen(px, Qt.FramelessWindowHint | Qt.SplashScreen)     # non «sempre in primo piano»: altre app possono stare sopra
     scr = cursor_screen()
     geo = sp.frameGeometry()
     geo.moveCenter(scr.geometry().center())
