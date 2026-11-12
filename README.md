@@ -9,7 +9,8 @@ Tutto offline, nessuna telemetria. I video originali non vengono mai modificati.
 
 ## Come si lavora (una selezione, passi cliccabili)
 Si trascinano i video (o la cartella) **una volta sola**: l'app riconosce da sola se è una **conferenza** (video + registrazione audio a parte) o
-un **video social** e apre lo strumento giusto. Dal selettore in alto (Social / Conferenze) si può cambiare strumento tenendo gli stessi file.
+un **video social**, mostra i file trovati (video, audio, slide) perché **confermi o tolga la spunta a quelli che non c'entrano**, e solo dopo prepara
+il lavoro e apre lo strumento giusto. Dal selettore in alto (Social / Conferenze) si può cambiare strumento tenendo gli stessi file.
 I passi stanno in alto e si cliccano; **Indietro / Avanti** sono in alto a destra. Su un portatile 1366×768 le pagine non scorrono (con testo molto
 grande scorrono invece di tagliare). Passi: Conferenze = Cartella · Sincronia · Inizio e fine · Titoli · Sottotitoli · Audio · Esporta;
 Social = Video · Taglia · Formato · Due video · Grafica · Sottotitoli · Audio · Esporta. «Togli i silenzi» si annulla con **Rimetti i silenzi**.
@@ -27,6 +28,9 @@ finestra si apre sullo stesso schermo; non c'è più lo splash grande di PyInsta
 **Prestazioni.** Le anteprime in secondo piano girano a priorità bassa e con metà dei processori; saltando in un punto lontano si prepara una
 finestra breve (1 minuto) e, se il computer è lento, la qualità scende da sola (fino a 180 px) e torna su quando ce la fa. Cambiando passo il video
 si ferma e si interrompono le anteprime e la stima dell'export, che altrimenti continuerebbero a consumare processore.
+
+**Solo video.** Le slide trovate si possono togliere già nella conferma dei file; nella pagina Sorgenti e in «Slide e PiP» (Avanzata) c'è il pulsante
+**Solo video**, che toglie slide e secondo video. Un nuovo lavoro non eredita più le slide del precedente.
 
 ## Aggiornamenti e rilasci
 L'app controlla su GitHub se c'è una versione nuova (all'avvio, al massimo ogni 20 ore; si spegne da **Aiuto → Cerca gli aggiornamenti

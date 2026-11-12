@@ -14,6 +14,14 @@ from .spec import LayoutSpan, PipSettings, SlideChange, SlideSettings
 PDF_RENDER_WIDTH = 1920
 
 
+def clear_slides(spec) -> None:
+    """«Solo video»: toglie slide, secondo video di cattura e cambi; lo stile del riquadro (PiP) resta."""
+    from .spec import LayoutSpan
+    sl = spec.slides
+    sl.enabled, sl.files, sl.video, sl.video_offset = False, [], "", 0.0
+    sl.changes, sl.layouts = [], [LayoutSpan(0.0, "slide_full")]
+
+
 def load_slides(files: list[str], width: int = PDF_RENDER_WIDTH) -> list[QImage]:
     """Carica PDF (QtPdf) e immagini in un'unica lista di pagine/slide."""
     out: list[QImage] = []

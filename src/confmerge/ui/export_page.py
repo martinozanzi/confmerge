@@ -56,6 +56,12 @@ def start_export(parent, ctl, state, run_now: bool):
     if prep.space_warnings and QMessageBox.question(parent, "Spazio sul disco", "\n".join(prep.space_warnings)
                                                     + "\n\nContinuare comunque?") != QMessageBox.Yes:
         return None
+    dup = ctl.duplicate_of(prep)
+    if dup is not None and not os.environ.get("CONFMERGE_NO_CONFIRM"):
+        if QMessageBox.question(parent, "Esportazione già in coda",
+                                f"C'è già un'esportazione di questo video ({dup.name}, {dup.status}).\n"
+                                "Aggiungerne un'altra, con un nome diverso?") != QMessageBox.Yes:
+            return None
     item = ctl.enqueue(prep)
     if run_now:
         ctl.start_queue()
@@ -174,6 +180,13 @@ class ExportPage(QWidget):
         b = SecondaryButton("Avvia la coda", "play")
         b.clicked.connect(self.ctl.start_queue)
         row.addWidget(b)
+        right.addLayout(row)
+        row = QHBoxLayout()
+        b = GhostButton("Annulla tutto", "x")
+        b.setToolTip("Ferma l'esportazione in corso e toglie dalla coda tutte le altre")
+        b.clicked.connect(self.ctl.cancel_all)
+        row.addWidget(b)
+        row.addStretch(1)
         right.addLayout(row)
         row = QHBoxLayout()
         row.addWidget(label("Quando ha finito:"))
@@ -360,13 +373,15 @@ class ExportPage(QWidget):
         self.table.setVisible(bool(q.items))
         self.table.setRowCount(len(q.items))
         for r, it in enumerate(q.items):
-            for c, v in enumerate((it.name, it.estimate, it.status + (f": {it.error[:60]}" if it.error else ""),
-                                   f"{it.progress * 100:.0f}")):
+            for c, v in enumerate((it.name, it.estimate, it.status + (f" — {it.stage}" if it.status == "in corso" and it.stage else "")
+                                   + (f": {it.error[:60]}" if it.error else ""),
+                                   f"{max(it.progress, 0.01 if it.status == 'in corso' else 0.0) * 100:.0f}")):
                 self.table.setItem(r, c, QTableWidgetItem(v))
 
     def _progress(self, item, frac: float, remaining, size: int):
-        self.bar.setValue(frac)
-        self.prog_lbl.setText(f"{item.name}: {frac * 100:.0f}% — tempo rimasto "
+        self.bar.setValue(max(frac, 0.01))             # mai «0 %»: si vede che sta lavorando
+        pct = f"{max(frac, 0.01) * 100:.0f}% — " if frac > 0 else ""
+        self.prog_lbl.setText(self.ctl.status_line(item) + "\n" + pct + "tempo rimasto "
                               + (fmt_dur(remaining) if remaining is not None else "in calcolo…")
                               + f" — file finora {size / 1e6:.0f} MB")
 

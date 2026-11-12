@@ -1,4 +1,5 @@
 import shutil
+from pathlib import Path
 import subprocess
 import time
 
@@ -238,3 +239,28 @@ def test_leaving_a_step_stops_playback_and_background_work(app_window):
     assert st.export._debounce.isActive()
     st.export.cancel_estimate()
     assert not st.export._debounce.isActive() and not st.export._dirty     # la stima in attesa non parte più
+
+
+def test_files_are_confirmed_before_preparing(app_window, media, monkeypatch):
+    """Prima della preparazione si confermano i file: togliendone uno non viene usato; annullando non parte niente."""
+    app, st, w = app_window
+    monkeypatch.delenv("CONFMERGE_NO_CONFIRM", raising=False)
+    from PySide6.QtCore import Qt
+    from confmerge.ui.confirm_files import ConfirmFilesDialog
+    shown = []
+
+    def cancel(self):
+        shown.append([p.name for p in self.selected_paths()])
+        return 0
+    monkeypatch.setattr(ConfirmFilesDialog, "exec", cancel)
+    w.open_sources([media])
+    assert shown and "v1.mp4" in shown[0] and st.project is None and w.selection == []         # annullato: niente da preparare
+
+    def drop_second(self):
+        self.groups["video"].child(1).setCheckState(0, Qt.Unchecked)
+        return 1
+    monkeypatch.setattr(ConfirmFilesDialog, "exec", drop_second)
+    w.open_sources([media])
+    wait(app, lambda: st.project is not None)
+    assert [Path(c).name for c in st.project.clips] == ["v0.mp4"]                              # solo il file confermato
+    assert [p.name for p in w.selection if p.suffix == ".mp4"] == ["v0.mp4"]                   # e la scelta si ricorda per l'altro strumento

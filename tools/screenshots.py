@@ -275,6 +275,10 @@ def main():
         shots.append(name)
         dlg.close()
 
+    from confmerge import detect
+    from confmerge.ui.confirm_files import ConfirmFilesDialog
+    det = detect.classify([media])
+    snap_dialog(ConfirmFilesDialog(det, det.kind, w), "c0-conferma-file")
     snap_dialog(BrandDialog(sst, w), "b0-marchio")
     snap_dialog(ThumbnailDialog(sst, outdir, "x", lambda: 2.0, w), "m0-miniatura")
     print(json.dumps({"shots": shots, "problems": problems}, ensure_ascii=False), flush=True)

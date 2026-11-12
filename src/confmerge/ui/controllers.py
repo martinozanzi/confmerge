@@ -20,7 +20,7 @@ from ..ffmpeg_wrapper import FFmpegError
 from ..audio_parts import audio_parts
 from ..media_scan import (AUDIO_EXT, SLIDE_EXT, VIDEO_EXT, MediaInfo, _natural_key, find_gaps, media_info, order_clips,
                           pick_external_audio, scan_folder)
-from ..queue import DONE, FAILED, QueueItem
+from ..queue import CANCELLED, DONE, FAILED, PENDING, QueueItem
 from ..spec import RenderSpec, output_size
 from ..worker import Worker
 
@@ -123,6 +123,10 @@ class SourcesModel(QObject):
     def audio_for_analysis(self):
         """Quello che si passa all'analisi: un file, o l'elenco delle parti."""
         return list(self.audio_parts) if len(self.audio_parts) > 1 else self.audio
+
+    def clear_slides(self) -> None:
+        self.slides = []
+        self.changed.emit()
 
     def add_slides(self, paths_: list[Path]) -> None:
         self.slides += list(paths_)
@@ -266,6 +270,8 @@ class AnalysisRunner(QObject):
         st = self.state
         st.project, st.clips, st.cam, st.ext = rep.project, rep.clips, rep.cam, rep.ext
         st.proxy, st.proxy_stale, st.warnings, st.proxy_range = out, False, rep.warnings, rng
+        from .. import slides as slide_tools
+        slide_tools.clear_slides(st.spec)                    # un nuovo lavoro non eredita le slide del precedente
         if slides:
             st.spec.slides.files = [str(s) for s in slides]
             st.spec.slides.enabled = True
@@ -626,13 +632,22 @@ class ExportController(QObject):
         key = id(prep.spec)
         self._est_mid[key] = (est.time_lo + est.time_hi) / 2 if est else 0.0
 
+        holder: list[QueueItem] = []
+
+        def say(text: str) -> None:
+            log.info("Export %s: %s", prep.out.name, text)
+            if holder:
+                holder[0].stage = text
+
         def job(cancel, prog, prep=prep, key=key):
-            rep = ee.run_export(prep.proj, clips, prep.spec, prep.out, prep.t0, prep.t1, prog, cancel)
+            rep = ee.run_export(prep.proj, clips, prep.spec, prep.out, prep.t0, prep.t1, prog, cancel, stage=say)
             self._reports[key] = rep
 
         item = QueueItem(prep.out.name, job, (est.time_text + " · " + est.size_text) if est else "")
+        holder.append(item)
         item.key = key  # type: ignore[attr-defined]
         item.path = prep.out  # type: ignore[attr-defined]
+        item.source = tuple(str(c) for c in prep.proj.clips)  # type: ignore[attr-defined]
         st.queue.add(item)
         self.queueChanged.emit()
         return item
@@ -690,9 +705,51 @@ class ExportController(QObject):
             size = path.stat().st_size if path and Path(path).exists() else 0
             self.progress.emit(cur, cur.progress, self.speed.remaining(cur.progress), size)
 
+    def cancel_all(self) -> None:
+        self.state.queue.cancel_all()
+        self.queueChanged.emit()
+
+    def status_line(self, item: QueueItem) -> str:
+        """«Esportazione 1 di 3 — nome — fase (trascorso 0:42)»: si capisce sempre che il lavoro va avanti."""
+        items = [i for i in self.state.queue.items if i.status not in (CANCELLED,)]
+        n = len(items)
+        k = items.index(item) + 1 if item in items else 1
+        el = max(0.0, time.time() - item.started) if item.started else 0.0
+        m, sec = divmod(int(el), 60)
+        head = f"Esportazione {k} di {n} — " if n > 1 else ""
+        stage = item.stage or "Sto lavorando…"
+        txt = f"{head}{item.name} — {stage} (tempo trascorso {m}:{sec:02d})"
+        if self.stalled(item) > 90:
+            txt += " — Sembra ferma: puoi attendere ancora o usare «Annulla»."
+        return txt
+
+    def stalled(self, item: QueueItem) -> float:
+        """Secondi dall'ultimo cambiamento (percentuale o fase) dell'elemento in corso."""
+        sig = (round(item.progress, 3), item.stage)
+        if getattr(self, "_sig", None) != (id(item), sig):
+            self._sig, self._sig_t = (id(item), sig), time.time()
+        return time.time() - getattr(self, "_sig_t", time.time())
+
+    def duplicate_of(self, prep: Prepared) -> QueueItem | None:
+        """Un'esportazione dello stesso video già in coda o in corso (di solito un doppio clic)."""
+        src = tuple(str(c) for c in prep.proj.clips)
+        return next((i for i in self.state.queue.items
+                     if i.status in (PENDING, "in corso") and getattr(i, "source", None) == src), None)
+
+    def pending_count(self) -> int:
+        return sum(1 for i in self.state.queue.items if i.status == PENDING)
+
+    def elapsed(self) -> float:
+        cur = self._current
+        return max(0.0, time.time() - cur.started) if cur and cur.status == "in corso" and cur.started else 0.0
+
     def _done(self) -> None:
         self._poll.stop()
         self.queueChanged.emit()
+        if self.state.queue.next_pending() is not None:       # elemento accodato mentre il worker finiva: riparte da solo
+            self.run_worker = None
+            self.start_queue()
+            return
         results = [(it, self.report_for(it)) for it in self.state.queue.items if it.status in (DONE, FAILED)]
         for it, rep in results:
             if it.status == FAILED:

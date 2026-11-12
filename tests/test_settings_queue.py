@@ -65,3 +65,36 @@ def test_queue_cancel_running():
     q.add(QueueItem("x", job))
     q.run_all()
     assert q.items[0].status == CANCELLED
+
+
+def test_cancel_all_cancels_pending_and_running():
+    q = ExportQueue()
+    a, b = QueueItem("a", lambda c, p: None), QueueItem("b", lambda c, p: None)
+    q.add(a)
+    q.add(b)
+    a.status = "in corso"
+    q.cancel_all()
+    assert a.cancel.is_set() and b.status == CANCELLED
+
+
+def test_nan_progress_is_ignored_and_stage_and_start_are_recorded():
+    q = ExportQueue()
+
+    def job(cancel, prog):
+        prog(float("nan"), None)
+        prog(float("inf"), None)
+        prog(0.5, None)
+
+    it = QueueItem("a", job)
+    q.add(it)
+    q.run_next()
+    assert it.status == DONE and it.progress == 1.0 and it.started > 0
+
+
+def test_run_export_reports_stages(tmp_path):
+    import shutil
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg non disponibile")
+    from confmerge import export_engine as ee
+    import inspect
+    assert "stage" in inspect.signature(ee.run_export).parameters

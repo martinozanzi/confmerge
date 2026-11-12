@@ -255,3 +255,26 @@ def test_modern_templates_are_first_and_render(qapp):
     for k, tid in (("title", "vlog"), ("title", "kinetic"), ("lower_third", "block"), ("outro", "endscreen")):
         img = G.render_template(T.get(k, tid), 320, 180)
         assert not img.isNull() and img.width() == 320
+
+
+def test_new_project_does_not_inherit_old_slides_and_solo_video_clears_them(qapp):
+    from types import SimpleNamespace
+    from pathlib import Path
+    import numpy as np
+    from confmerge import slides as slide_tools
+    from confmerge.project import Project
+    from confmerge.ui.state import AppState
+    st = AppState()
+    st.spec.slides.files, st.spec.slides.enabled = ["vecchia.pdf"], True
+    st.spec.slides.video, st.spec.slides.pip.size = "cattura.mp4", 0.31
+    rep = SimpleNamespace(project=Project(total_duration=10.0), clips=[], cam=np.zeros(1), ext=np.zeros(1), warnings=[])
+    st.analysis._ok((rep, Path("p.mp4"), (0.0, 10.0)), [])                   # nuova cartella senza slide
+    assert st.spec.slides.files == [] and not st.spec.slides.enabled and st.spec.slides.video == ""
+    assert st.spec.slides.pip.size == 0.31                                   # lo stile del riquadro resta
+    st.analysis._ok((rep, Path("p.mp4"), (0.0, 10.0)), [Path("nuova.pdf")])  # nuova cartella con una slide
+    assert st.spec.slides.files == ["nuova.pdf"] and st.spec.slides.enabled
+    slide_tools.clear_slides(st.spec)                                        # «Solo video»
+    assert st.spec.slides.files == [] and not st.spec.slides.enabled and len(st.spec.slides.layouts) == 1
+    st.sources.slides = [Path("x.pdf")]
+    st.sources.clear_slides()
+    assert st.sources.slides == []

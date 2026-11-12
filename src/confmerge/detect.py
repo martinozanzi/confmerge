@@ -20,6 +20,8 @@ class Detection:
     folder: Path | None = None
     reason: str = ""                            # frase per l'utente: perché è stato scelto
     sources: list[Path] = field(default_factory=list)      # quello che l'utente aveva scelto (file o cartelle), da conservare
+    all_audios: list[Path] = field(default_factory=list)   # tutti i file audio trovati (anche quelli che non sembrano parti)
+    all_slides: list[Path] = field(default_factory=list)
 
 
 def expand(items) -> tuple[list[Path], Path | None]:
@@ -44,7 +46,7 @@ def classify(items) -> Detection:
     slides = [f for f in files if f.suffix.lower() in SLIDE_EXT]
     if not videos:
         return Detection("", audio=audios[0] if audios else None, slides=slides, folder=folder, sources=items,
-                         reason="Non ho trovato video (file .mp4, .mov o .m4v).")
+                         reason="Non ho trovato video (file .mp4, .mov o .m4v).", all_audios=audios, all_slides=slides)
     n = len(videos)
     quanti = "un video" if n == 1 else f"{n} video"
     if audios:
@@ -52,6 +54,7 @@ def classify(items) -> Detection:
         parts = audio_parts(audios)
         rec = "una registrazione audio" if len(parts) < 2 else f"una registrazione audio divisa in {len(parts)} file"
         return Detection("merge", videos, parts[0], parts, slides, folder, f"Ho trovato {quanti} e {rec}: sembra una conferenza "
-                         "da unire e sincronizzare.", items)
+                         "da unire e sincronizzare.", items, audios, slides)
     return Detection("social", videos, slides=slides, folder=folder, reason=f"Ho trovato {quanti} con {'il suo' if n == 1 else 'il loro'} audio: "
-                     "li preparo per i social. (Se hai anche una registrazione audio a parte, trascinala insieme ai video.)", sources=items)
+                     "li preparo per i social. (Se hai anche una registrazione audio a parte, trascinala insieme ai video.)", sources=items,
+                     all_slides=slides)
