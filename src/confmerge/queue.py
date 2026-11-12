@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -16,6 +17,8 @@ class QueueItem:
     status: str = PENDING
     progress: float = 0.0
     error: str = ""
+    stage: str = ""                # fase in corso (testo per l'utente)
+    started: float = 0.0           # quando è partito (time.time())
     cancel: threading.Event = field(default_factory=threading.Event)
 
 
@@ -40,6 +43,10 @@ class ExportQueue:
         elif it.status == RUNNING:
             it.cancel.set()
 
+    def cancel_all(self) -> None:
+        for i in range(len(self.items)):
+            self.cancel(i)
+
     def next_pending(self) -> QueueItem | None:
         return next((it for it in self.items if it.status == PENDING), None)
 
@@ -49,10 +56,16 @@ class ExportQueue:
         it = self.next_pending()
         if it is None:
             return None
-        it.status = RUNNING
+        it.status, it.started, it.stage = RUNNING, time.time(), ""
 
         def prog(frac: float, speed: float | None) -> None:
-            it.progress = frac
+            try:
+                f = float(frac)
+            except (TypeError, ValueError):
+                return
+            if f != f or f in (float("inf"), float("-inf")):   # NaN/inf (durata 0): niente avanzamento invece di un errore
+                return
+            it.progress = min(max(f, 0.0), 1.0)
             if on_progress:
                 on_progress(it)
 

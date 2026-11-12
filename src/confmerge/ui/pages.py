@@ -47,13 +47,22 @@ class SelectPage(QWidget):
         b = PrimaryButton("Scegli la cartella…", "folder-open")
         b.clicked.connect(self.pick_folder)
         row.addWidget(b)
-        for text, icon, fn in (("Aggiungi video…", "film", self.add_videos), ("Scegli l'audio…", "headphones", self.pick_audio),
-                               ("Aggiungi slide…", "presentation", self.add_slides)):
+        for text, icon, fn in (("Aggiungi video…", "film", self.add_videos), ("Scegli l'audio…", "headphones", self.pick_audio)):
             bb = SecondaryButton(text, icon)
             bb.clicked.connect(fn)
             row.addWidget(bb)
         row.addStretch(1)
         lay.addLayout(row)
+        row2 = QHBoxLayout()                                   # su due righe: con la finestra stretta i pulsanti non si tagliano
+        row2.setSpacing(S1)
+        bb = SecondaryButton("Aggiungi slide…", "presentation")
+        bb.clicked.connect(self.add_slides)
+        row2.addWidget(bb)
+        solo = SecondaryButton("Solo video", "film", "Toglie le slide: il video si prepara senza slide né secondo video")
+        solo.clicked.connect(self.only_video)
+        row2.addWidget(solo)
+        row2.addStretch(1)
+        lay.addLayout(row2)
         orow = QHBoxLayout()
         orow.addWidget(label("Ordine di montaggio:"))
         self.order_seg = Segmented([("Per data di registrazione", "date"), ("Per nome file", "name"), ("Manuale", "manual")])
@@ -135,6 +144,13 @@ class SelectPage(QWidget):
         f, _ = QFileDialog.getOpenFileName(self, "Audio registrato", self._start_dir(), AUDIO_FILTER)
         if f:
             self.model.set_audio(Path(f))
+
+    def only_video(self):
+        """Niente slide: le toglie dall'elenco e dal progetto già aperto."""
+        from .. import slides as slide_tools
+        self.model.clear_slides()
+        slide_tools.clear_slides(self.state.spec)
+        self.state.touch()
 
     def add_slides(self):
         fs, _ = QFileDialog.getOpenFileNames(self, "Slide (PDF o immagini)", self._start_dir(), SLIDE_FILTER)

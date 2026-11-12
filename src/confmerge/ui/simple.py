@@ -142,12 +142,12 @@ class SimpleStart(QWidget):
     def use_folder(self, folder: Path):
         self.use_paths([folder])
 
-    def use_paths(self, items: list[Path]):
-        """Carica i file o la cartella scelti (arrivano già riconosciuti come conferenza dalla finestra)."""
+    def use_paths(self, items: list[Path], folder: Path | None = None):
+        """Carica i file o la cartella scelti (arrivano già riconosciuti e confermati dalla finestra)."""
         m = self.state.sources
         self.problem.setText("")
         self.audio_btn.setVisible(False)
-        folder = next((Path(p) for p in items if Path(p).is_dir()), None)
+        folder = folder or next((Path(p) for p in items if Path(p).is_dir()), None)
         try:
             m.clear()
             folder = m.accept_paths([Path(p) for p in items]) or folder
@@ -622,7 +622,7 @@ class SimpleExport(QWidget):
         item = start_export(self, self.ctl, self.state, True)
         if item:
             self._last_item = item
-            self.ring.setValue(0)
+            self.ring.setValue(0.01)
             self.work_msg.setText("Sto creando il video…")
             self.work_sub.setText("Puoi lasciare il computer acceso: non serve fare altro.")
             self.stack.setCurrentIndex(1)
@@ -649,7 +649,9 @@ class SimpleExport(QWidget):
         return w
 
     def _progress(self, item, frac, remaining, size):
-        self.ring.setValue(frac)
+        self.ring.setValue(max(frac, 0.01))            # mai «0 %»
+        more = self.ctl.pending_count()
+        self.work_msg.setText(self.ctl.status_line(item) + (f" · In coda: altri {more}" if more else ""))
         self.work_sub.setText(("Mancano circa " + fmt_dur(remaining) + ". " if remaining is not None else "Sto calcolando il tempo che manca… ")
                               + f"Finora il file pesa {size / 1e6:.0f} MB.")
 

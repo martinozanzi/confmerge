@@ -16,7 +16,7 @@ _crash_file = None
 _last_dialog = 0.0
 
 
-def support_info(lines: int = 150) -> str:
+def support_info(lines: int = 150, queues: str = "") -> str:
     """Testo da incollare quando si chiede assistenza: versioni + ultime righe del log."""
     try:
         import PySide6
@@ -35,7 +35,7 @@ def support_info(lines: int = 150) -> str:
             tail += "\n--- crash.log ---\n" + crash.read_text(encoding="utf-8", errors="replace")[-3000:]
     except OSError:
         pass
-    return head + "\n" + tail
+    return head + (queues + "\n" if queues else "") + "\n" + tail
 
 
 def _qt_handler(mode, ctx, msg):

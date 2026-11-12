@@ -231,8 +231,9 @@ class MainWindow(QMainWindow):
     def active_state(self) -> AppState:
         return self.social_state if self.app == "social" else self.state
 
-    def open_sources(self, items, kind: str | None = None) -> None:
-        """Unico punto d'ingresso dei file: riconosce se è una conferenza o un video social e apre lo strumento giusto."""
+    def open_sources(self, items, kind: str | None = None, confirm: bool = True) -> None:
+        """Unico punto d'ingresso dei file: riconosce se è una conferenza o un video social, fa confermare i file
+        (si tolgono quelli che non c'entrano) e apre lo strumento giusto."""
         from .. import detect
         det = detect.classify(items)
         start = self.social.start if self.app == "social" else self.simple.start
@@ -240,6 +241,17 @@ class MainWindow(QMainWindow):
             start.problem.setText(det.reason + " Trascina video (mp4, mov) o la cartella che li contiene.")
             return
         kind = kind or det.kind
+        folder = det.folder
+        if confirm and not os.environ.get("CONFMERGE_NO_CONFIRM"):
+            from .confirm_files import ConfirmFilesDialog
+            dlg = ConfirmFilesDialog(det, kind, self)
+            if not dlg.exec():
+                return                                         # annullato: non si prepara niente
+            kind, chosen = dlg.kind(), dlg.selected_paths()
+            if not chosen:
+                return
+            det = detect.classify(chosen)                      # solo i file confermati
+            det.folder = folder
         target = self.social_state if kind == "social" else self.state
         if target.project and not self.confirm_discard(only=target):
             return
@@ -249,7 +261,7 @@ class MainWindow(QMainWindow):
         if kind == "social":
             self.social.start.start(det.videos)
         else:
-            self.simple.start.use_paths(det.sources)          # la pagina Sorgenti dell'Avanzata si aggiorna da sola
+            self.simple.start.use_paths(det.sources, folder)  # la pagina Sorgenti dell'Avanzata si aggiorna da sola
         toast(self, det.reason if kind == det.kind else
               ("Uso gli stessi file come conferenza." if kind == "merge" else "Uso gli stessi file come video social."), "info")
 
@@ -261,7 +273,7 @@ class MainWindow(QMainWindow):
         st = self.active_state
         busy = st.social.running if app == "social" else st.analysis.running
         if self.selection and not st.project and not busy:
-            self.open_sources(self.selection, kind=app)
+            self.open_sources(self.selection, kind=app, confirm=False)      # i file sono già stati confermati
 
     def set_app(self, app: str, animate: bool = True, remember: bool = True) -> None:
         """Cambia strumento: Studio Social o Merge Conferenze (ognuno tiene il suo lavoro)."""
@@ -377,7 +389,12 @@ class MainWindow(QMainWindow):
     def copy_support_info(self):
         from PySide6.QtWidgets import QApplication
         from .. import diagnostics
-        QApplication.clipboard().setText(diagnostics.support_info())
+        rows = []
+        for st in (self.state, self.social_state):
+            for it in st.queue.items:
+                rows.append(f"{self._tool(st)}: {it.name} — {it.status}" + (f" — {it.stage}" if it.stage else "")
+                            + f" — {it.progress * 100:.0f}%" + (f" — {it.error[:200]}" if it.error else ""))
+        QApplication.clipboard().setText(diagnostics.support_info(queues=("Coda di export:\n" + "\n".join(rows)) if rows else ""))
         toast(self, "Informazioni copiate. Incollale in un messaggio (Ctrl+V) per chiedere assistenza.", "ok")
 
     def settings_dialog(self):

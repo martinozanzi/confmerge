@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import Property, QRectF, QSize, Qt
 from PySide6.QtGui import QColor, QConicalGradient, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QSizePolicy, QWidget
@@ -18,12 +20,24 @@ class _Animated(QWidget):
         return self._v
 
     def set_v(self, v: float) -> None:
-        self._v = v
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(v):                    # un NaN qui faceva fallire l'animazione e il disegno a ripetizione
+            return
+        self._v = min(max(v, 0.0), 1.0)
         self.update()
 
     v_ = Property(float, get_v, set_v)
 
     def setValue(self, v: float) -> None:          # 0..1, con scorrimento fluido
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return
+        if not math.isfinite(v):
+            return
         v = min(max(v, 0.0), 1.0)
         animate(self, b"v_", self._v, v, ANIM_SLOW)
         self._target = v

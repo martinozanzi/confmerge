@@ -507,6 +507,10 @@ class SlidesTab(QWidget):
         b = QPushButton("Sincronizza il secondo video")
         b.clicked.connect(self.sync_video)
         lay.addWidget(b)
+        self.solo_btn = QPushButton("Solo video (togli slide e secondo video)")
+        self.solo_btn.setToolTip("Toglie le slide e il secondo video: il video resta com'è")
+        self.solo_btn.clicked.connect(self.only_video)
+        lay.addWidget(self.solo_btn)
         self.src = QLabel()
         self.src.setWordWrap(True)
         lay.addWidget(self.src)
@@ -607,6 +611,13 @@ class SlidesTab(QWidget):
                         it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                     t.setItem(r, c, it)
             t.blockSignals(False)
+
+    def only_video(self):
+        from .. import slides as slide_tools
+        slide_tools.clear_slides(self.state.spec)
+        self.state.sources.clear_slides()
+        self.refresh_tables()
+        self.state.touch()
 
     def pick_files(self):
         fs, _ = QFileDialog.getOpenFileNames(self, "Slide", "", "Slide (*.pdf *.png *.jpg *.jpeg)")

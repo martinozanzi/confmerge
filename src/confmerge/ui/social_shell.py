@@ -1,6 +1,7 @@
 """Studio Social: quattro passi guidati. Video → Taglia → Aspetto → Esporta."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -830,8 +831,13 @@ class SocialExport(QWidget):
 
     def _queue(self):
         for it, bar in self.rows.values():
-            bar.setValue(it.progress)
-            self.row_lbls[id(it)].setText(f"{it.name}  ·  {it.status}" + (f" ({it.error})" if it.error else ""))
+            run = it.status == "in corso"
+            bar.setValue(max(it.progress, 0.01) if run else it.progress)      # mai «0 %» mentre lavora
+            extra = ""
+            if run:
+                m, sec = divmod(int(time.time() - it.started), 60) if it.started else (0, 0)
+                extra = f" — {it.stage or 'Sto lavorando…'} (tempo trascorso {m}:{sec:02d})"
+            self.row_lbls[id(it)].setText(f"{it.name}  ·  {it.status}{extra}" + (f" ({it.error})" if it.error else ""))
 
     def _finished(self, results):
         mine = [(it, rep) for it, rep in results if id(it) in self.rows]

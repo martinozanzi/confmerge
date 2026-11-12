@@ -99,9 +99,11 @@ def measure_loudness(p: Project, spec: RenderSpec, t0: float, t1: float) -> dict
 
 def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, t0: float, t1: float,
                on_progress: Progress | None = None, cancel: threading.Event | None = None,
-               force_mode: str | None = None) -> ExportReport:
+               force_mode: str | None = None, stage: Callable[[str], None] | None = None) -> ExportReport:
     out = Path(out)
+    say = stage or (lambda _t: None)
     from .audio_parts import ensure_project_audio
+    say("Unisco le parti dell'audio…")
     ensure_project_audio(p, cancel)
     inputs = {Path(c).resolve() for c in p.clips} | ({Path(p.audio).resolve()} if p.audio else set())
     if out.resolve() in inputs:
@@ -113,12 +115,14 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
     notes = list(dec.warnings)
     loud = None
     if spec.audio.loudnorm and p.kind != "social":
+        say("Misuro il volume…")
         loud = measure_loudness(p, spec, t0, t1)
     workdir = paths.temp_dir() / f"job_{int(started * 1000)}"
     try:
         if mode == "copy":
             post = ",".join(audio_fx.voice_chain(_voice(spec)) + ([audio_fx.loudnorm_apply_filter(loud)] if loud else []))
             plan = build_plan(p, clips, out, "copy", t0, t1, audio_post=post)
+            say("Copio il video…")
             run_ffmpeg(plan.args, plan.duration, on_progress, cancel)
             notes += plan.notes
             enc, dur = "copy", plan.duration
@@ -126,8 +130,10 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
             slides_imgs = load_slides(spec.slides.files) if (spec.slides.enabled and spec.slides.files) else []
             enc = encoders.resolve_encoder(spec.export.encoder)
             while True:
+                say("Preparo grafica e titoli…")
                 res = graph.build(p, clips, spec, out, t0, t1, workdir, loud=loud, encoder=enc, slide_images=slides_imgs)
                 try:
+                    say("Codifico il video…")
                     run_ffmpeg(res.args, res.duration, on_progress, cancel)
                     break
                 except FFmpegError as e:
@@ -137,6 +143,8 @@ def run_export(p: Project, clips: list[MediaInfo], spec: RenderSpec, out: Path, 
                     notes.append(f"Accelerazione hardware non riuscita ({enc}): ricodificato su CPU.")
                     enc = "libx264"
             dur = res.duration
+        if spec.audio.loudnorm:
+            say("Controllo il volume finale…")
         after = audio_fx.measure(["-i", str(out)], []) if spec.audio.loudnorm else None
         return ExportReport(mode, str(out), time.time() - started, out.stat().st_size, enc, dur, loud, after, notes)
     finally:
